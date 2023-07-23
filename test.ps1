@@ -54,3 +54,15 @@ finally {
     }
     $session.Dispose()
 }
+
+<#
+# Starts a realtime trace for a single provider until ctrl+c is sent
+Trace-EtwEvent -SessionName PSETW -Provider $guid -KeywordsAny 0x1 -Keywords All 0x1 -Level 1
+
+# Providers can be passed through input and are generated from
+# another cmdlet
+Trace-EtwEvent -SessionName PSETW -Provider $providerArray
+
+# Same as Register-ObjectEvent to support integration in pwsh's eventing setup
+Register-EtwEvent -SessionName PSETW @SameAsTraceEtwEvent @SameAsRegisterObjectEvent
+#>

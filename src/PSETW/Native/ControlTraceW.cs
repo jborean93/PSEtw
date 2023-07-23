@@ -6,9 +6,9 @@ namespace PSETW.Native;
 internal partial class Advapi32
 {
     [DllImport("Advapi32.dll", CharSet = CharSet.Unicode)]
-    public static extern int ControlTraceW(
+    public unsafe static extern int ControlTraceW(
         long TraceHandle,
-        [MarshalAs(UnmanagedType.LPWStr)] string InstanceName,
+        char* InstanceName,
         nint Properties,
         EventTraceControl ControlCode);
 }

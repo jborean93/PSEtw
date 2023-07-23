@@ -11,9 +11,7 @@ namespace PSETW;
 
 public sealed class TraceSession : IDisposable
 {
-    private nint _traceProperties = IntPtr.Zero;
-    private nint _sessionName = IntPtr.Zero;
-    private long _handle = 0;
+    private SafeETWTraceSession _session;
 
     public string Name { get; }
 
@@ -89,20 +87,7 @@ public sealed class TraceSession : IDisposable
 
     public void Dispose()
     {
-        if (_handle != 0)
-        {
-            Advapi32.ControlTraceW(
-                _handle,
-                Name,
-                _traceProperties,
-                EventTraceControl.EVENT_TRACE_CONTROL_STOP);
-            _handle = 0;
-        }
-        if (_traceProperties != IntPtr.Zero)
-        {
-            Marshal.FreeHGlobal(_traceProperties);
-        }
+        _session?.Dispose();
         GC.SuppressFinalize(this);
     }
-    ~TraceSession() => Dispose();
 }
