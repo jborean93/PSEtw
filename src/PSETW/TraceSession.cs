@@ -1,10 +1,7 @@
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading;
 using PSETW.Native;
 
 namespace PSETW;
@@ -15,45 +12,104 @@ public sealed class TraceSession : IDisposable
 
     public string Name { get; }
 
-    private TraceSession(string name)
+    private TraceSession(SafeETWTraceSession session, string name)
     {
+        _session = session;
         Name = name;
-        int propsLength = Marshal.SizeOf<Advapi32.EVENT_TRACE_PROPERTIES_V2>();
-        int bufferSize = propsLength + Encoding.Unicode.GetByteCount(name) + 2;
-        _traceProperties = Marshal.AllocHGlobal(bufferSize);
-
-        int res;
-        unsafe
-        {
-            new Span<byte>((void*)_traceProperties, propsLength).Fill(0);
-            Advapi32.EVENT_TRACE_PROPERTIES_V2* props = (Advapi32.EVENT_TRACE_PROPERTIES_V2*)_traceProperties;
-            props->Wnode.BufferSize = bufferSize;
-            props->Wnode.ClientContext = 1;  // Query Performance Counter (QPC).
-            props->Wnode.Flags = WNodeFlag.WNODE_FLAG_TRACED_GUID | WNodeFlag.WNODE_FLAG_VERSIONED_PROPERTIES;
-            props->LogFileMode = EventTraceMode.EVENT_TRACE_REAL_TIME_MODE;
-            props->LoggerNameOffset = propsLength;
-            props->V2Control = 2;
-            _sessionName = IntPtr.Add(_traceProperties, propsLength);
-
-            res = Advapi32.StartTraceW(
-                out _handle,
-                Name,
-                (nint)props);
-        }
-
-        if (res != 0)
-        {
-            throw new Win32Exception(res);
-        }
     }
 
     public static TraceSession Create(string name)
     {
-        if (name.Length > 1024) {
+        if (name.Length > 1024)
+        {
             throw new ArgumentException("Trace session name must not be more than 1024 characters", nameof(name));
         }
 
-        return new(name);
+        int propsLength = Marshal.SizeOf<Advapi32.EVENT_TRACE_PROPERTIES_V2>();
+        int bufferSize = propsLength + Encoding.Unicode.GetByteCount(name) + 2;
+        long handle = 0;
+        nint buffer = Marshal.AllocHGlobal(bufferSize);
+        try
+        {
+            unsafe
+            {
+                new Span<byte>((void*)buffer, propsLength).Fill(0);
+                Advapi32.EVENT_TRACE_PROPERTIES_V2* props = (Advapi32.EVENT_TRACE_PROPERTIES_V2*)buffer;
+                props->Wnode.BufferSize = bufferSize;
+                props->Wnode.ClientContext = 1;  // Query Performance Counter (QPC).
+                props->Wnode.Flags = WNodeFlag.WNODE_FLAG_TRACED_GUID | WNodeFlag.WNODE_FLAG_VERSIONED_PROPERTIES;
+                props->LogFileMode = EventTraceMode.EVENT_TRACE_REAL_TIME_MODE;
+                props->LoggerNameOffset = propsLength;
+                props->V2Control = 2;
+
+                int res = Advapi32.StartTraceW(
+                    out handle,
+                    name,
+                    buffer);
+
+                if (res != 0)
+                {
+                    throw new Win32Exception();
+                }
+
+                SafeETWTraceSession sessionHandle = new(handle, buffer, true);
+                return new(sessionHandle, name);
+            }
+        }
+        catch
+        {
+            Marshal.FreeHGlobal(buffer);
+            throw;
+        }
+    }
+
+    public static TraceSession Open(string name)
+    {
+        if (name.Length > 1024)
+        {
+            throw new ArgumentException("Trace session name must not be more than 1024 characters", nameof(name));
+        }
+
+        int propsLength = Marshal.SizeOf<Advapi32.EVENT_TRACE_PROPERTIES_V2>();
+        int bufferSize = propsLength + 4096;
+        long handle = 0;
+        nint buffer = Marshal.AllocHGlobal(bufferSize);
+        try
+        {
+            unsafe
+            {
+                new Span<byte>((void*)buffer, propsLength).Fill(0);
+                Advapi32.EVENT_TRACE_PROPERTIES_V2* props = (Advapi32.EVENT_TRACE_PROPERTIES_V2*)buffer;
+                props->Wnode.BufferSize = bufferSize;
+                props->LoggerNameOffset = propsLength;
+                props->LogFileNameOffset = propsLength + 2048;
+                props->V2Control = 2;
+
+                int res;
+                fixed (char* namePtr = name)
+                {
+                    res = Advapi32.ControlTraceW(
+                        0,
+                        namePtr,
+                        buffer,
+                        EventTraceControl.EVENT_TRACE_CONTROL_QUERY);
+                }
+
+                if (res != 0)
+                {
+                    throw new Win32Exception();
+                }
+                handle = props->Wnode.HistoricalContext;
+
+                SafeETWTraceSession sessionHandle = new(handle, buffer, false);
+                return new(sessionHandle, name);
+            }
+        }
+        catch
+        {
+            Marshal.FreeHGlobal(buffer);
+            throw;
+        }
     }
 
     public void EnableTrace(
@@ -67,7 +123,7 @@ public sealed class TraceSession : IDisposable
         unsafe
         {
             res = Advapi32.EnableTraceEx2(
-                _handle,
+                _session.DangerousGetTraceHandle(),
                 ref providerId,
                 controlCode,
                 level,
@@ -83,7 +139,18 @@ public sealed class TraceSession : IDisposable
         }
     }
 
-    public Trace OpenTrace() => new(_sessionName);
+    public Trace OpenTrace()
+    {
+        nint sessionNamePtr = IntPtr.Zero;
+        unsafe
+        {
+            nint buffer = _session.DangerousGetHandle();
+            Advapi32.EVENT_TRACE_PROPERTIES_V2* props = (Advapi32.EVENT_TRACE_PROPERTIES_V2*)buffer;
+            sessionNamePtr = IntPtr.Add(buffer, props->LoggerNameOffset);
+        }
+
+        return new(sessionNamePtr);
+    }
 
     public void Dispose()
     {

@@ -32,16 +32,6 @@ internal partial class Advapi32
 
     public const int EVENT_CONTROL_CODE_CAPTURE_STATE = 2;
 
-    public const int TRACE_LEVEL_CRITICAL = 1;
-
-    public const int TRACE_LEVEL_ERROR = 2;
-
-    public const int TRACE_LEVEL_WARNING = 3;
-
-    public const int TRACE_LEVEL_INFORMATION = 4;
-
-    public const int TRACE_LEVEL_VERBOSE = 5;
-
     [DllImport("Advapi32.dll")]
     public unsafe static extern int EnableTraceEx2(
         long TraceHandle,
@@ -52,4 +42,14 @@ internal partial class Advapi32
         long MatchAllKeyword,
         int Timeout,
         ENABLE_TRACE_PARAMETERS* EnableParameters);
+}
+
+public enum TraceLevel : byte
+{
+    TRACE_LEVEL_LOG_ALWAYS = 0,
+    TRACE_LEVEL_CRITICAL = 1,
+    TRACE_LEVEL_ERROR = 2,
+    TRACE_LEVEL_WARNING = 3,
+    TRACE_LEVEL_INFORMATION = 4,
+    TRACE_LEVEL_VERBOSE = 5,
 }
