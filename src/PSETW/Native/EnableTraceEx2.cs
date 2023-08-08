@@ -44,6 +44,13 @@ internal partial class Advapi32
         ENABLE_TRACE_PARAMETERS* EnableParameters);
 }
 
+public enum EventControlCode
+{
+    EVENT_CONTROL_CODE_DISABLE_PROVIDER = 0,
+    EVENT_CONTROL_CODE_ENABLE_PROVIDER = 1,
+    EVENT_CONTROL_CODE_CAPTURE_STATE = 2,
+}
+
 public enum TraceLevel : byte
 {
     TRACE_LEVEL_LOG_ALWAYS = 0,

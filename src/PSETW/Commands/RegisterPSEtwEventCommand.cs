@@ -1,12 +1,6 @@
 using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.ComponentModel;
 using System.Diagnostics;
-using System.Linq;
 using System.Management.Automation;
-using System.Management.Automation.Language;
-using System.Runtime.InteropServices;
 using PSETW.Native;
 
 namespace PSETW.Commands;
@@ -31,7 +25,10 @@ public sealed class RegisterPSEtwEventCommand : PSCmdlet
     public string? SessionName { get; set; }
 
     [Parameter]
-    public string? SourceIdentifier { get; set; }
+    public string SourceIdentifier { get; set; } = Guid.NewGuid().ToString();
+
+    [Parameter]
+    public SwitchParameter SupportEvent { get; set; }
 
     [Parameter(
         Mandatory = true,
@@ -44,84 +41,81 @@ public sealed class RegisterPSEtwEventCommand : PSCmdlet
         ParameterSetName = "Single"
     )]
     [ArgumentCompleter(typeof(KeywordCompleter))]
-    public int KeywordsAny { get; set; }
+    public KeywordsStringOrLong[] KeywordsAny { get; set; } = Array.Empty<KeywordsStringOrLong>();
 
     [Parameter(
         ParameterSetName = "Single"
     )]
     [ArgumentCompleter(typeof(KeywordCompleter))]
-    public int KeywordsAll { get; set; }
+    public KeywordsStringOrLong[] KeywordsAll { get; set; } = Array.Empty<KeywordsStringOrLong>();
 
     [Parameter(
         ParameterSetName = "Single"
     )]
-    public TraceIntOrString Level { get; set; }
+    [ArgumentCompleter(typeof(LevelCompletor))]
+    public LevelStringOrInt[] Level { get; set; } = Array.Empty<LevelStringOrInt>();
 
     protected override void ProcessRecord()
     {
         Debug.Assert(Provider != null);
         Guid providerGuid = Provider!.GetProviderGuid();
 
-        /*
-        LOG_ALWAYS (0) 	Event bypasses level-based event filtering. Events should not use this level.
-        CRITICAL (1) 	Critical error
-        ERROR (2) 	Error
-        WARNING (3) 	Warning
-        INFO (4) 	Informational
-        VERBOSE (5) 	Verbose
-        */
-        string a = "";
-    }
-}
+        FieldInfo[] keywords = ProviderHelper.GetProviderFieldInfo(providerGuid,
+            EventFieldType.EventKeywordInformation);
+        long keywordsAny = 0;
+        foreach (KeywordsStringOrLong kwd in KeywordsAny)
+        {
+            keywordsAny |= kwd.GetKeywordLong(keywords);
+        }
+        long keywordsAll = 0;
+        foreach (KeywordsStringOrLong kwd in KeywordsAll)
+        {
+            keywordsAll |= kwd.GetKeywordLong(keywords);
+        }
 
-public sealed class TraceIntOrString
-{
-    public static string[] KnownTraceNames = new[]
-    {
-        "Critical",
-        "Error",
-        "Warning",
-        "Information",
-        "Verbose",
-    };
+        FieldInfo[] levels = ProviderHelper.GetProviderFieldInfo(providerGuid,
+            EventFieldType.EventLevelInformation);
+        int level = 0;
+        foreach (LevelStringOrInt lvl in Level)
+        {
+            level |= lvl.GetLevelInt(levels);
+        }
 
-    private int? _traceInt;
-    private string? _traceString;
+        TraceSession session;
+        if (string.IsNullOrEmpty(SessionName))
+        {
+            session = PSETWGlobals.DefaultETWSession;
+        }
+        else
+        {
+            session = TraceSession.Open(SessionName!);
+        }
 
-    public TraceIntOrString(int value)
-    {
-        _traceInt = value;
-    }
+        session.EnableTrace(
+            providerGuid,
+            (int)EventControlCode.EVENT_CONTROL_CODE_ENABLE_PROVIDER,
+            (byte)level,
+            keywordsAny,
+            keywordsAll);
 
-    public TraceIntOrString(string value)
-    {
-        _traceString = value;
-    }
+        Trace trace = session.OpenTrace();
 
-    internal int GetTraceLevel(Guid provider)
-    {
-        return 0;
-    }
-}
+        PSEventSubscriber eventSub = Events.SubscribeEvent(
+            trace,
+            "EventReceived",
+            SourceIdentifier,
+            MessageData,
+            Action,
+            SupportEvent,
+            Forward,
+            MaxTriggerCount);
 
-internal sealed class LevelCompletor : IArgumentCompleter
-{
-    private static HashSet<string> _constantNames = new()
-    {
-        "Critical",
-        "Error",
-        "Warning",
-        "Information",
-        "Verbose",
-    };
+        trace.Start();
 
-    public IEnumerable<CompletionResult> CompleteArgument(
-        string commandName,
-        string parameterName,
-        string wordToComplete,
-        CommandAst commandAst,
-        IDictionary fakeBoundParameters)
-    {
-        yield return new("ab");
+        WriteObject(trace);
+        if (Action != null)
+        {
+            WriteObject(eventSub);
+        }
     }
 }
