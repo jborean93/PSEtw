@@ -4,6 +4,7 @@ using namespace System.IO
 using namespace System.Management.Automation
 using namespace System.Net
 using namespace System.Net.Http
+using namespace System.Runtime.InteropServices
 
 #Requires -Version 7.2
 
@@ -25,10 +26,16 @@ class Manifest {
     [Hashtable[]]$BuildRequirements
     [Hashtable[]]$TestRequirements
     [Version]$PowerShellVersion
+    [Architecture]$PowerShellArch
     [string[]]$TargetFrameworks
     [string]$TestFramework
 
-    Manifest([string]$Configuration, [Version]$PowerShellVersion, [string]$ManifestPath) {
+    Manifest(
+        [string]$Configuration,
+        [Version]$PowerShellVersion,
+        [Architecture]$PowerShellArch,
+        [string]$ManifestPath
+    ) {
         $moduleManifestParams = @{
             Path = [Path]::Combine($PSScriptRoot, "..", "module", "*.psd1")
             # Can emit errors about invalid RootModule which don't matter here
@@ -93,6 +100,7 @@ class Manifest {
             }
             $this.PowerShellVersion = "$($PowerShellVersion.Major).$($PowerShellVersion.Minor).$build"
         }
+        $this.PowerShellArch = $PowerShellArch
 
         $csProjPath = [Path]::Combine($this.DotnetPath, "*.csproj")
         [xml]$csharpProjectInfo = Get-Content $csProjPath
@@ -186,9 +194,29 @@ Function Assert-PowerShell {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [Version]$Version
+        [Version]$Version,
+
+        [Parameter()]
+        [Architecture]
+        $Arch = [RuntimeInformation]::ProcessArchitecture
     )
 
+    $releaseArch = switch ($Arch) {
+        X64 { 'x64' }
+        X86 { 'x86' }
+        default {
+            $err = [ErrorRecord]::new(
+                [Exception]::new("Unsupported archecture requests '$_'"),
+                "UnknownArch",
+                [ErrorCategory]::InvalidArgument,
+                $_
+            )
+            $PSCmdlet.ThrowTerminatingError($err)
+        }
+    }
+
+    $osArch = [RuntimeInformation]::OSArchitecture
+    $procArch = [RuntimeInformation]::ProcessArchitecture
     if ($Version -eq '5.1') {
         if ($IsCoreCLR -and -not $IsWindows) {
             $err = [ErrorRecord]::new(
@@ -199,18 +227,37 @@ Function Assert-PowerShell {
             )
             $PSCmdlet.ThrowTerminatingError($err)
         }
-        return [Path]::Combine($env:SystemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+
+        $system32 = if ($Arch -eq [Architecture]::X64) {
+            if ($osArch -ne [Architecture]::X64) {
+                $err = [ErrorRecord]::new(
+                    [Exception]::new("Cannot use PowerShell 5.1 $Arch on Windows $osArch"),
+                    "WinPSNoAvailableArch",
+                    [ErrorCategory]::InvalidArgument,
+                    $Arch
+                )
+                $PSCmdlet.ThrowTerminatingError($err)
+            }
+
+            ($procArch -eq [Architecture]::X64) ? 'System32' : 'SystemNative'
+        }
+        else {
+            ($procArch -eq [Architecture]::X86) ? 'System32' : 'SysWow64'
+        }
+
+        return [Path]::Combine($env:SystemRoot, $system32, "WindowsPowerShell", "v1.0", "powershell.exe")
     }
     elseif (
         $PSVersionTable.PSVersion.Major -eq $Version.Major -and
         $PSVersionTable.PSVersion.Minor -eq $Version.Minor -and
-        $PSVersionTable.PSVersion.Patch -eq $Version.Build
+        $PSVersionTable.PSVersion.Patch -eq $Version.Build -and
+        $procArch -eq $Arch
     ) {
         return [Environment]::GetCommandLineArgs()[0] -replace '\.dll$', ''
     }
 
     $targetFolder = $PSCmdlet.GetUnresolvedProviderPathFromPSPath(
-        [Path]::Combine($PSScriptRoot, "..", "output", "PowerShell-$Version"))
+        [Path]::Combine($PSScriptRoot, "..", "output", "PowerShell-$Version-$releaseArch"))
     $pwshExe = [Path]::Combine($targetFolder, "pwsh$nativeExt")
 
     if (Test-Path -LiteralPath $pwshExe) {
@@ -218,13 +265,14 @@ Function Assert-PowerShell {
     }
 
     if ($IsWindows) {
-        $releasePath = "PowerShell-$Version-win-x64.zip"
-        $fileName = "pwsh-$Version.zip"
+        $releasePath = "PowerShell-$Version-win-$releaseArch.zip"
+        $fileName = "pwsh-$Version-$releaseArch.zip"
         $nativeExt = ".exe"
     }
     else {
-        $releasePath = "powershell-$Version-linux-x64.tar.gz"
-        $fileName = "pwsh-$Version.tar.gz"
+        $os = $IsLinux ? "linux" : "osx"
+        $releasePath = "powershell-$Version-$os-$releaseArch.tar.gz"
+        $fileName = "pwsh-$Version-$releaseArch.tar.gz"
         $nativeExt = ""
     }
     $downloadUrl = "https://github.com/PowerShell/PowerShell/releases/download/v$Version/$releasePath"

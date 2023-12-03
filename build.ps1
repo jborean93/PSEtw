@@ -1,4 +1,5 @@
 using namespace System.IO
+using namespace System.Runtime.InteropServices
 
 #Requires -Version 7.2
 
@@ -19,6 +20,10 @@ param(
     $PowerShellVersion = $PSVersionTable.PSVersion,
 
     [Parameter()]
+    [Architecture]
+    $PowerShellArch = [RuntimeInformation]::ProcessArchitecture,
+
+    [Parameter()]
     [string]
     $ModuleNupkg
 )
@@ -28,7 +33,7 @@ $ErrorActionPreference = 'Stop'
 . ([Path]::Combine($PSScriptRoot, "tools", "common.ps1"))
 
 $manifestPath = ([Path]::Combine($PSScriptRoot, 'manifest.psd1'))
-$Manifest = [Manifest]::new($Configuration, $PowerShellVersion, $manifestPath)
+$Manifest = [Manifest]::new($Configuration, $PowerShellVersion, $PowerShellArch, $manifestPath)
 
 if ($ModuleNupkg) {
     Write-Host "Expanding module nupkg to '$($Manifest.ReleasePath)'" -ForegroundColor Cyan

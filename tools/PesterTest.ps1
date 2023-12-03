@@ -1,5 +1,7 @@
 using namespace System.IO
 
+#Requires -Module Pester
+
 <#
 .SYNOPSIS
 Run Pester test
@@ -22,22 +24,6 @@ param (
 )
 
 $ErrorActionPreference = 'Stop'
-
-
-$manifestPath = [Path]::Combine($PSScriptRoot, "..", "manifest.psd1")
-$manifest = Import-PowerShellDataFile -Path $manifestPath
-$testModules = @(
-    'Pester'
-    $manifest.TestRequirements.ModuleName
-)
-
-$modPath = [Path]::Combine($PSScriptRoot, "..", "output", "Modules")
-Get-ChildItem -LiteralPath $modPath -Directory | ForEach-Object {
-    if ($_.Name -in $testModules) {
-        Write-Host "Importing $_"
-        Import-Module -Name $_.FullName
-    }
-}
 
 [PSCustomObject]$PSVersionTable |
     Select-Object -Property *, @{N = 'Architecture'; E = {

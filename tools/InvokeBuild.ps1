@@ -168,7 +168,7 @@ task PesterTests {
         dotnet tool install --global coverlet.console
     }
 
-    $pwsh = Assert-PowerShell -Version $Manifest.PowerShellVersion
+    $pwsh = Assert-PowerShell -Version $Manifest.PowerShellVersion -Arch $Manifest.PowerShellArch
     $resultsFile = [Path]::Combine($Manifest.TestResultsPath, 'Pester.xml')
     if (Test-Path -LiteralPath $resultsFile) {
         Remove-Item $resultsFile -ErrorAction Stop -Force
@@ -199,7 +199,20 @@ task PesterTests {
             '--merge-with', $unitCoveragePath
         }
     )
-    coverlet @arguments
+    $origEnv = $env:PSModulePath
+    try {
+        $pwshHome = Split-Path -Path $pwsh -Parent
+        $env:PSModulePath = @(
+            [Path]::Combine($pwshHome, "Modules")
+            [Path]::Combine($Manifest.OutputPath, "Modules")
+        ) -join ([Path]::PathSeparator)
+
+        coverlet @arguments
+    }
+    finally {
+        $env:PSModulePath = $origEnv
+    }
+
     if ($LASTEXITCODE) {
         throw "Pester failed tests"
     }
