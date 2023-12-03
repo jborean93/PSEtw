@@ -1,3 +1,7 @@
+using namespace System.IO
+
+#Requires -Module Pester
+
 <#
 .SYNOPSIS
 Run Pester test
@@ -20,11 +24,6 @@ param (
 )
 
 $ErrorActionPreference = 'Stop'
-
-$requirements = Import-PowerShellDataFile ([IO.Path]::Combine($PSScriptRoot, '..', 'requirements-dev.psd1'))
-foreach ($req in $requirements.GetEnumerator()) {
-    Import-Module -Name ([IO.Path]::Combine($PSScriptRoot, 'Modules', $req.Key))
-}
 
 [PSCustomObject]$PSVersionTable |
     Select-Object -Property *, @{N = 'Architecture'; E = {
