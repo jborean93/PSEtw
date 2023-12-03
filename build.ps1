@@ -12,7 +12,15 @@ param(
     [Parameter()]
     [ValidateSet('Build', 'Test')]
     [string]
-    $Task = 'Build'
+    $Task = 'Build',
+
+    [Parameter()]
+    [Version]
+    $PowerShellVersion = $PSVersionTable.PSVersion,
+
+    [Parameter()]
+    [string]
+    $ModuleNupkg
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,26 +28,21 @@ $ErrorActionPreference = 'Stop'
 . ([Path]::Combine($PSScriptRoot, "tools", "common.ps1"))
 
 $manifestPath = ([Path]::Combine($PSScriptRoot, 'manifest.psd1'))
-$Manifest = [Manifest]::new($manifestPath)
+$Manifest = [Manifest]::new($Configuration, $PowerShellVersion, $manifestPath)
 
-Write-Host "Installing build dependencies" -ForegroundColor Cyan
-@(
-    @{
-        ModuleName = 'InvokeBuild'
-        RequiredVersion = $Manifest.InvokeBuildVersion
-    }
-    $Task -eq 'Build' ? $Manifest.BuildRequirements : $Manifest.TestRequirements
-) | Install-BuildDependencies
-
-if ($Task -eq 'Build') {
-    # Install coverlet
+if ($ModuleNupkg) {
+    Write-Host "Expanding module nupkg to '$($Manifest.ReleasePath)'" -ForegroundColor Cyan
+    Expand-Nupkg -Path $ModuleNupkg -DestinationPath $Manifest.ReleasePath
 }
+
+Write-Host "Installing PowerShell dependencies" -ForegroundColor Cyan
+$deps = $Task -eq 'Build' ? $Manifest.BuildRequirements : $Manifest.TestRequirements
+$deps | Install-BuildDependencies
 
 $buildScript = [Path]::Combine($PSScriptRoot, "tools", "InvokeBuild.ps1")
 $invokeBuildSplat = @{
     Task = $Task
     File = $buildScript
     Manifest = $manifest
-    Configuration = $Configuration
 }
 Invoke-Build @invokeBuildSplat

@@ -10,18 +10,25 @@ using namespace System.Net.Http
 class Manifest {
     [PSModuleInfo]$Module
 
+    [ValidateSet("Debug", "Release")]
+    [string]$Configuration
+
+    [string]$DocsPath
+    [string]$DotnetPath
+    [string]$OutputPath
+    [string]$PowerShellPath
+    [string]$ReleasePath
+    [string]$TestPath
+    [string]$TestResultsPath
+
     [string]$DotnetProject
-    [string]$InvokeBuildVersion
     [Hashtable[]]$BuildRequirements
     [Hashtable[]]$TestRequirements
-
-    [string]$DotnetRoot
-    [string]$OutputRoot
-    [string]$PowerShellRoot
-
+    [Version]$PowerShellVersion
     [string[]]$TargetFrameworks
+    [string]$TestFramework
 
-    Manifest([string]$Path) {
+    Manifest([string]$Configuration, [Version]$PowerShellVersion, [string]$ManifestPath) {
         $moduleManifestParams = @{
             Path = [Path]::Combine($PSScriptRoot, "..", "module", "*.psd1")
             # Can emit errors about invalid RootModule which don't matter here
@@ -30,25 +37,109 @@ class Manifest {
         }
         $this.Module = Test-ModuleManifest @moduleManifestParams
 
-        $raw = Import-PowerShellDataFile -LiteralPath $Path
+        $this.Configuration = $Configuration
+
+        $raw = Import-PowerShellDataFile -LiteralPath $ManifestPath
         $this.DotnetProject = $raw.DotnetProject ?? $this.Module.Name
-        $this.InvokeBuildVersion = $raw.InvokeBuildVersion
-        $this.BuildRequirements = $raw.BuildRequirements ?? @()
-        $this.TestRequirements = $raw.TestRequirements ?? @()
 
-        $this.DotnetRoot = [Path]::GetFullPath(
+        $this.DocsPath = [Path]::GetFullPath(
+            [Path]::Combine($PSScriptRoot, "..", "docs"))
+        $this.DotnetPath = [Path]::GetFullPath(
             [Path]::Combine($PSScriptRoot, "..", "src", $this.DotnetProject))
-        $this.OutputRoot = [Path]::GetFullPath(
+        $this.OutputPath = [Path]::GetFullPath(
             [Path]::Combine($PSScriptRoot, "..", "output"))
-        $this.PowerShellRoot = [Path]::GetFullPath(
+        $this.PowerShellPath = [Path]::GetFullPath(
             [Path]::Combine($PSScriptRoot, "..", "module"))
+        $this.ReleasePath = [Path]::GetFullPath(
+            [Path]::Combine($this.OutputPath, $this.Module.Name, $this.Module.Version))
+        $this.TestPath = [Path]::GetFullPath(
+            [Path]::Combine($PSScriptRoot, "..", "tests"))
+        $this.TestResultsPath = [Path]::GetFullPath(
+            [Path]::Combine($this.OutputPath, "TestResults"))
 
-        $csProjPath = [Path]::Combine($this.DotnetProject, "*.csproj")
+        if (-not (Test-Path -LiteralPath $this.ReleasePath)) {
+            New-Item -Path $this.ReleasePath -ItemType Directory -Force | Out-Null
+        }
+
+        if (-not (Test-Path -LiteralPath $this.TestResultsPath)) {
+            New-Item -Path $this.TestResultsPath -ItemType Directory -Force | Out-Null
+        }
+
+        $invokeBuildReq = @{
+            ModuleName = 'InvokeBuild'
+            RequiredVersion = $raw.InvokeBuildVersion
+        }
+        $pesterReq = @{
+            ModuleName = 'Pester'
+            RequiredVersion = $raw.PesterVersion
+        }
+        $this.BuildRequirements = @(
+            $invokeBuildReq
+            $raw.BuildRequirements
+        )
+        $this.TestRequirements = @(
+            $invokeBuildReq
+            $pesterReq
+            $raw.TestRequirements
+        )
+
+        if ($PowerShellVersion.Major -lt 6) {
+            $this.PowerShellVersion = "5.1"
+        }
+        else {
+            $build = $PowerShellVersion.Build
+            if ($build -eq -1) {
+                $build = 0
+            }
+            $this.PowerShellVersion = "$($PowerShellVersion.Major).$($PowerShellVersion.Minor).$build"
+        }
+
+        $csProjPath = [Path]::Combine($this.DotnetPath, "*.csproj")
         [xml]$csharpProjectInfo = Get-Content $csProjPath
         $this.TargetFrameworks = @(
             @($csharpProjectInfo.Project.PropertyGroup)[0].TargetFrameworks.Split(
                 ';', [StringSplitOptions]::RemoveEmptyEntries)
         )
+
+        $availableFrameworks = @(
+            if ($this.PowerShellVersion -eq '5.1') {
+                'net48'
+                foreach ($minor in '7', '6', '5') {
+                    foreach ($build in '2', '1', '') {
+                        "net4$minor$build"
+                    }
+                }
+            }
+            else {
+                # Minor releases + 4 correspond to the highest framework
+                # available. e.g. 7.1 runs on net5.0 or lower, 7.2, on net6.0
+                # or lower, etc.
+                $netFrameworks = @(
+                    for ($i = 5; $i -le $this.PowerShellVersion.Minor + 4; $i++) {
+                        "net$i.0"
+                    }
+                )
+                [Array]::Reverse($netFrameworks)
+
+                $netFrameworks
+                'netstandard2.1'
+            }
+
+            # WinPS and PS are compatible with netstandard to 2.0
+            '2.0', '1.6', '1.5', '1.4', '1.3', '1.2', '1.1', '1.0' |
+                ForEach-Object { "netstandard$_" }
+        )
+
+        foreach ($framework in $availableFrameworks) {
+            if ($framework -in $this.TargetFrameworks) {
+                $this.TestFramework = $framework
+                break
+            }
+        }
+
+        if (-not $this.TestFramework) {
+            throw "No available target framework for PowerShell '$($this.PowerShellVersion)'"
+        }
     }
 }
 
@@ -95,8 +186,28 @@ Function Assert-PowerShell {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [string]$Version
+        [Version]$Version
     )
+
+    if ($Version -eq '5.1') {
+        if ($IsCoreCLR -and -not $IsWindows) {
+            $err = [ErrorRecord]::new(
+                [Exception]::new("Cannot use PowerShell 5.1 on non-Windows hosts"),
+                "WinPSNotAvailable",
+                [ErrorCategory]::InvalidArgument,
+                $Version
+            )
+            $PSCmdlet.ThrowTerminatingError($err)
+        }
+        return [Path]::Combine($env:SystemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+    }
+    elseif (
+        $PSVersionTable.PSVersion.Major -eq $Version.Major -and
+        $PSVersionTable.PSVersion.Minor -eq $Version.Minor -and
+        $PSVersionTable.PSVersion.Patch -eq $Version.Build
+    ) {
+        return [Environment]::GetCommandLineArgs()[0] -replace '\.dll$', ''
+    }
 
     $targetFolder = $PSCmdlet.GetUnresolvedProviderPathFromPSPath(
         [Path]::Combine($PSScriptRoot, "..", "output", "PowerShell-$Version"))
@@ -127,41 +238,90 @@ Function Assert-PowerShell {
         Invoke-WebRequest -UseBasicParsing -Uri $downloadUrl -OutFile $downloadArchive
     }
 
-    if ($IsWindows) {
+    if (-not (Test-Path -LiteralPath $pwshExe)) {
+        if ($IsWindows) {
+            $oldPreference = $global:ProgressPreference
+            try {
+                $global:ProgressPreference = 'SilentlyContinue'
+                Expand-Archive -LiteralPath $downloadArchive -DestinationPath $targetFolder -Force
+            }
+            finally {
+                $global:ProgressPreference = $oldPreference
+            }
+        }
+        else {
+            tar -xf $downloadArchive --directory $targetFolder
+            if ($LASTEXITCODE) {
+                $err = [ErrorRecord]::new(
+                    [Exception]::new("Failed to extract pwsh tar for $Version"),
+                    "FailedToExtractTar",
+                    [ErrorCategory]::NotSpecified,
+                    $null
+                )
+                $PSCmdlet.ThrowTerminatingError($err)
+            }
+
+            chmod +x $pwshExe
+            if ($LASTEXITCODE) {
+                $err = [ErrorRecord]::new(
+                    [Exception]::new("Failed to set pwsh as executable at '$pwshExe'"),
+                    "FailedToSetPwshExecutable",
+                    [ErrorCategory]::NotSpecified,
+                    $null
+                )
+                $PSCmdlet.ThrowTerminatingError($err)
+            }
+        }
+    }
+
+    $pwshExe
+}
+
+function Expand-Nupkg {
+    param (
+        [Parameter(Mandatory)]
+        [string]
+        $Path,
+
+        [Parameter(Mandatory)]
+        [string]
+        $DestinationPath
+    )
+
+    $Path = (Resolve-Path -Path $Path).Path
+
+    # WinPS doesn't support extracting from anything without a .zip extension
+    # so it needs to be renamed there
+    $renamed = $false
+    try {
+        if ($PSVersionTable.PSVersion.Major -lt 6) {
+            $zipPath = $Path -replace '.nupkg$', '.zip'
+            Move-Item -LiteralPath $Path -Destination $zipPath
+            $renamed = $true
+        }
+        else {
+            $zipPath = $Path
+        }
+
         $oldPreference = $global:ProgressPreference
         try {
             $global:ProgressPreference = 'SilentlyContinue'
-            Expand-Archive -LiteralPath $downloadArchive -DestinationPath $targetFolder
+            Expand-Archive -LiteralPath $zipPath -DestinationPath $DestinationPath -Force
         }
         finally {
             $global:ProgressPreference = $oldPreference
         }
     }
-    else {
-        tar -xf $downloadArchive --directory $targetFolder
-        if ($LASTEXITCODE) {
-            $err = [ErrorRecord]::new(
-                [Exception]::new("Failed to extract pwsh tar for $Version"),
-                "FailedToExtractTar",
-                [ErrorCategory]::NotSpecified,
-                $null
-            )
-            $PSCmdlet.ThrowTerminatingError($err)
-        }
-
-        chmod +x $pwshExe
-        if ($LASTEXITCODE) {
-            $err = [ErrorRecord]::new(
-                [Exception]::new("Failed to set pwsh as executable at '$pwshExe'"),
-                "FailedToSetPwshExecutable",
-                [ErrorCategory]::NotSpecified,
-                $null
-            )
-            $PSCmdlet.ThrowTerminatingError($err)
+    finally {
+        if ($renamed) {
+            Move-Item -LiteralPath $zipPath -Destination $Path
         }
     }
 
-    $pwshExe
+    '`[Content_Types`].xml', '*.nuspec', '_rels', 'package' | ForEach-Object -Process {
+        $uneededPath = [Path]::Combine($DestinationPath, $_)
+        Remove-Item -Path $uneededPath -Recurse -Force
+    }
 }
 
 Function Install-BuildDependencies {
@@ -174,9 +334,17 @@ Function Install-BuildDependencies {
 
     begin {
         $modules = [List[IDictionary]]::new()
+        $modulePath = [Path]::Combine($PSScriptRoot, "..", "output", "Modules")
     }
     process {
-        $modules.AddRange($Requirements)
+        foreach ($dep in $Requirements) {
+            $currentModPath = [Path]::Combine($modulePath, $dep.ModuleName)
+            if (Test-Path -LiteralPath $currentModPath) {
+                Import-Module -Name $currentModPath
+                continue
+            }
+            $modules.Add($dep)
+        }
     }
     end {
         if (-not $modules) {
@@ -185,7 +353,6 @@ Function Install-BuildDependencies {
 
         Assert-ModuleFast -Version v0.0.1
 
-        $modulePath = ([Path]::Combine($PSScriptRoot, "..", "output", "Modules"))
         $installParams = @{
             ModulesToInstall = $modules
             Destination = $modulePath

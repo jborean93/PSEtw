@@ -1,3 +1,5 @@
+using namespace System.IO
+
 <#
 .SYNOPSIS
 Run Pester test
@@ -21,9 +23,20 @@ param (
 
 $ErrorActionPreference = 'Stop'
 
-$requirements = Import-PowerShellDataFile ([IO.Path]::Combine($PSScriptRoot, '..', 'requirements-dev.psd1'))
-foreach ($req in $requirements.GetEnumerator()) {
-    Import-Module -Name ([IO.Path]::Combine($PSScriptRoot, 'Modules', $req.Key))
+
+$manifestPath = [Path]::Combine($PSScriptRoot, "..", "manifest.psd1")
+$manifest = Import-PowerShellDataFile -Path $manifestPath
+$testModules = @(
+    'Pester'
+    $manifest.TestRequirements.ModuleName
+)
+
+$modPath = [Path]::Combine($PSScriptRoot, "..", "output", "Modules")
+Get-ChildItem -LiteralPath $modPath -Directory | ForEach-Object {
+    if ($_.Name -in $testModules) {
+        Write-Host "Importing $_"
+        Import-Module -Name $_.FullName
+    }
 }
 
 [PSCustomObject]$PSVersionTable |

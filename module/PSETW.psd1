@@ -11,12 +11,7 @@
 @{
 
     # Script module or binary module file associated with this manifest.
-    RootModule = if ($PSEdition -eq 'Core') {
-        'bin/net6.0/PSETW.dll'
-    }
-    else {
-        'bin/net472/PSETW.dll'
-    }
+    RootModule = 'PSETW.psm1'
 
     # Version number of this module.
     ModuleVersion = '0.1.0'
@@ -43,7 +38,7 @@
     PowerShellVersion = '5.1'
 
     # Minimum version of Microsoft .NET Framework required by this module. This prerequisite is valid for the PowerShell Desktop edition only.
-    # DotNetFrameworkVersion = '4.7.2'
+    DotNetFrameworkVersion = '4.7.2'
 
     # Minimum version of the common language runtime (CLR) required by this module. This prerequisite is valid for the PowerShell Desktop edition only.
     # ClrVersion = '4.0'
