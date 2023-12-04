@@ -1,13 +1,14 @@
+using PSEtw.Shared;
 using System;
 using System.Diagnostics;
 
-namespace PSETW;
+namespace PSEtw;
 
 internal static class PSETWGlobals
 {
-    private static TraceSession? _defaultETWSession = null;
+    private static EtwTraceSession? _defaultETWSession = null;
 
-    public static TraceSession DefaultETWSession
+    public static EtwTraceSession DefaultETWSession
     {
         get
         {
@@ -15,7 +16,7 @@ internal static class PSETWGlobals
             {
                 string name = typeof(PSETWGlobals).Assembly.GetName().Name!;
 
-                _defaultETWSession = TraceSession.Create(name);
+                _defaultETWSession = EtwTraceSession.Create(name);
             }
 
             return _defaultETWSession;

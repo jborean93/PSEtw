@@ -1,6 +1,6 @@
 using System;
 
-namespace PSETW;
+namespace PSEtw;
 
 public static class Jordan
 {

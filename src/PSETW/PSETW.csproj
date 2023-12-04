@@ -17,6 +17,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../PSETW.Shared/PSETW.Shared.csproj" />
+    <ProjectReference Include="../PSEtw.Shared/PSEtw.Shared.csproj" />
   </ItemGroup>
 </Project>

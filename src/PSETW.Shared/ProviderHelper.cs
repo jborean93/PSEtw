@@ -1,10 +1,10 @@
+using PSEtw.Shared.Native;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
-using PSETW.Native;
 
-namespace PSETW;
+namespace PSEtw.Shared;
 
 internal static class ProviderHelper
 {
@@ -162,7 +162,7 @@ internal static class ProviderHelper
                 {
                     string name = ReadPtrString(buffer, info.NameOffset) ?? "";
                     string description = ReadPtrString(buffer, info.DescriptionOffset) ?? "";
-                    finalRes.Add(new (name, description, info.Value));
+                    finalRes.Add(new(name, description, info.Value));
                 }
             }
         }
@@ -202,15 +202,13 @@ internal sealed class FieldInfo
     }
 }
 
-internal sealed class SafeETWTraceSession : SafeHandle
+internal sealed class SafeEtwTraceSession : SafeHandle
 {
     private long _sessionHandle = 0;
-    private bool _stopSession;
 
-    public SafeETWTraceSession(long handle, nint buffer, bool stopSession) : base(buffer, true)
+    public SafeEtwTraceSession(long handle, nint buffer) : base(buffer, true)
     {
         _sessionHandle = handle;
-        _stopSession = stopSession;
     }
 
     public override bool IsInvalid => _sessionHandle != 0 || handle != IntPtr.Zero;
@@ -220,18 +218,6 @@ internal sealed class SafeETWTraceSession : SafeHandle
     protected override bool ReleaseHandle()
     {
         int res = 0;
-        if (_sessionHandle != 0 && _stopSession)
-        {
-            unsafe
-            {
-                res = Advapi32.ControlTraceW(
-                    _sessionHandle,
-                    null,
-                    handle,
-                    EventTraceControl.EVENT_TRACE_CONTROL_STOP);
-            }
-            _sessionHandle = 0;
-        }
         if (handle != IntPtr.Zero)
         {
             Marshal.FreeHGlobal(handle);

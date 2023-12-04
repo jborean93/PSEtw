@@ -1,4 +1,4 @@
-name: Test PSETW
+name: Test PSEtw
 on:
   push:
     branches:

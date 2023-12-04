@@ -1,9 +1,9 @@
-# PSETW
+# PSEtw
 
-[![Test workflow](https://github.com/jborean93/PSETW/workflows/Test%20PSETW/badge.svg)](https://github.com/jborean93/PSETW/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/jborean93/PSETW/branch/main/graph/badge.svg?token=b51IOhpLfQ)](https://codecov.io/gh/jborean93/PSETW)
-[![PowerShell Gallery](https://img.shields.io/powershellgallery/dt/PSETW.svg)](https://www.powershellgallery.com/packages/PSETW)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/jborean93/PSETW/blob/main/LICENSE)
+[![Test workflow](https://github.com/jborean93/PSEtw/workflows/Test%20PSETW/badge.svg)](https://github.com/jborean93/PSEtw/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/jborean93/PSEtw/branch/main/graph/badge.svg?token=b51IOhpLfQ)](https://codecov.io/gh/jborean93/PSEtw)
+[![PowerShell Gallery](https://img.shields.io/powershellgallery/dt/PSEtw.svg)](https://www.powershellgallery.com/packages/PSEtw)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/jborean93/PSEtw/blob/main/LICENSE)
 
 Yet Another YAML PowerShell parser and writer.
 While there are a few other YAML modules out on the gallery this module includes the following features:
@@ -16,7 +16,7 @@ While there are a few other YAML modules out on the gallery this module includes
 
 There are schemas that support YAML 1.2 (default), 1.2 JSON, 1.1, and failsafe values.
 
-See [PSETW index](docs/en-US/PSETW.md) for more details.
+See [PSEtw index](docs/en-US/PSEtw.md) for more details.
 
 ## Requirements
 
@@ -65,10 +65,10 @@ You can install this module by running;
 
 ```powershell
 # Install for only the current user
-Install-Module -Name PSETW -Scope CurrentUser
+Install-Module -Name PSEtw -Scope CurrentUser
 
 # Install for all users
-Install-Module -Name PSETW -Scope AllUsers
+Install-Module -Name PSEtw -Scope AllUsers
 ```
 
 ## Contributing

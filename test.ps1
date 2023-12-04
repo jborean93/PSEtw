@@ -22,7 +22,7 @@ $keyword = 0x8  # Transport
 Get-EtwTraceSession -Name P* | Stop-EtwTraceSession
 
 $eventRegister = $proc = $trace = $null
-$session = [PSETW.TraceSession]::Create("PSETW")
+$session = [PSEtw.Shared.EtwTraceSession]::Create("PSEtw")
 try {
     $session.EnableTrace($providerId, $controlCode, $level, $keyword, 0)
     $trace = $session.OpenTrace()
@@ -57,12 +57,12 @@ finally {
 
 <#
 # Starts a realtime trace for a single provider until ctrl+c is sent
-Trace-EtwEvent -SessionName PSETW -Provider $guid -KeywordsAny 0x1 -Keywords All 0x1 -Level 1
+Trace-EtwEvent -SessionName PSEtw -Provider $guid -KeywordsAny 0x1 -Keywords All 0x1 -Level 1
 
 # Providers can be passed through input and are generated from
 # another cmdlet
-Trace-EtwEvent -SessionName PSETW -Provider $providerArray
+Trace-EtwEvent -SessionName PSEtw -Provider $providerArray
 
 # Same as Register-ObjectEvent to support integration in pwsh's eventing setup
-Register-EtwEvent -SessionName PSETW @SameAsTraceEtwEvent @SameAsRegisterObjectEvent
+Register-EtwEvent -SessionName PSEtw @SameAsTraceEtwEvent @SameAsRegisterObjectEvent
 #>

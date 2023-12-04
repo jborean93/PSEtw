@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace PSETW.Native;
+namespace PSEtw.Shared.Native;
 
 internal partial class Tdh
 {
@@ -52,12 +52,13 @@ internal partial class Tdh
         ref int BufferSize);
 }
 
-public enum DecodingSource {
-  DecodingSourceXMLFile,
-  DecodingSourceWbem,
-  DecodingSourceWPP,
-  DecodingSourceTlg,
-  DecodingSourceMax
+public enum DecodingSource
+{
+    DecodingSourceXMLFile,
+    DecodingSourceWbem,
+    DecodingSourceWPP,
+    DecodingSourceTlg,
+    DecodingSourceMax
 }
 
 [Flags]
@@ -286,7 +287,8 @@ InType+OutType combination is not recognized by a decoder, the decoder should
 use the default OutType associated with the field's InType (i.e. the decoder
 should behave as if the OutType were NULL).
 */
-enum _TDH_OUT_TYPE {
+enum _TDH_OUT_TYPE
+{
     TDH_OUTTYPE_NULL, /*
         Default OutType value. If a field's OutType is set to this value, the
         decoder should determine the default OutType corresponding to the

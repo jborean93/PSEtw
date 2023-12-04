@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace PSETW.Native;
+namespace PSEtw.Shared.Native;
 
 internal partial class Advapi32
 {

@@ -1,11 +1,12 @@
+using PSEtw.Shared;
+using PSEtw.Shared.Native;
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Management.Automation;
 using System.Threading;
-using PSETW.Native;
 
-namespace PSETW.Commands;
+namespace PSEtw.Commands;
 
 [Cmdlet(VerbsDiagnostic.Trace, "PSEtwEvent", DefaultParameterSetName = "Single")]
 public sealed class TracePSEtwEventCommand : PSCmdlet, IDisposable
@@ -67,14 +68,14 @@ public sealed class TracePSEtwEventCommand : PSCmdlet, IDisposable
             level |= lvl.GetLevelInt(levels);
         }
 
-        TraceSession session;
+        EtwTraceSession session;
         if (string.IsNullOrEmpty(SessionName))
         {
             session = PSETWGlobals.DefaultETWSession;
         }
         else
         {
-            session = TraceSession.Open(SessionName!);
+            session = EtwTraceSession.Open(SessionName!);
         }
 
         session.EnableTrace(
@@ -84,7 +85,7 @@ public sealed class TracePSEtwEventCommand : PSCmdlet, IDisposable
             keywordsAny,
             keywordsAll);
 
-        using Trace trace = session.OpenTrace();
+        using EtwTrace trace = session.OpenTrace();
         trace.EventReceived += EventReceived;
         trace.Start();
 

@@ -7,7 +7,11 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup Condition=" '$(TargetFramework)' != 'net6.0' ">
+    <PackageReference Include="System.Memory" Version="4.5.5" />
+  </ItemGroup>
+
   <ItemGroup>
-    <InternalsVisibleTo Include="PSETW" />
+    <InternalsVisibleTo Include="PSEtw" />
   </ItemGroup>
 </Project>

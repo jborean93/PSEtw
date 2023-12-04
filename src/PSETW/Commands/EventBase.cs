@@ -1,3 +1,5 @@
+using PSEtw.Shared;
+using PSEtw.Shared.Native;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -5,9 +7,8 @@ using System.Linq;
 using System.Management.Automation;
 using System.Management.Automation.Language;
 using System.Text.RegularExpressions;
-using PSETW.Native;
 
-namespace PSETW.Commands;
+namespace PSEtw.Commands;
 
 internal sealed class KeywordCompleter : IArgumentCompleter
 {

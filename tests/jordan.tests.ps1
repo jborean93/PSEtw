@@ -2,6 +2,6 @@
 
 Context "C" {
     It "Does test" {
-        [PSETW.Jordan]::MyMethod2() | Should -Be foo
+        [PSEtw.Jordan]::MyMethod2() | Should -Be foo
     }
 }

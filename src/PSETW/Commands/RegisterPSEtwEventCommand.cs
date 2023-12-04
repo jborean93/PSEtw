@@ -1,9 +1,10 @@
+using PSEtw.Shared;
+using PSEtw.Shared.Native;
 using System;
 using System.Diagnostics;
 using System.Management.Automation;
-using PSETW.Native;
 
-namespace PSETW.Commands;
+namespace PSEtw.Commands;
 
 [Cmdlet(VerbsLifecycle.Register, "PSEtwEvent", DefaultParameterSetName = "Single")]
 public sealed class RegisterPSEtwEventCommand : PSCmdlet
@@ -81,14 +82,14 @@ public sealed class RegisterPSEtwEventCommand : PSCmdlet
             level |= lvl.GetLevelInt(levels);
         }
 
-        TraceSession session;
+        EtwTraceSession session;
         if (string.IsNullOrEmpty(SessionName))
         {
             session = PSETWGlobals.DefaultETWSession;
         }
         else
         {
-            session = TraceSession.Open(SessionName!);
+            session = EtwTraceSession.Open(SessionName!);
         }
 
         session.EnableTrace(
@@ -98,7 +99,7 @@ public sealed class RegisterPSEtwEventCommand : PSCmdlet
             keywordsAny,
             keywordsAll);
 
-        Trace trace = session.OpenTrace();
+        EtwTrace trace = session.OpenTrace();
 
         PSEventSubscriber eventSub = Events.SubscribeEvent(
             trace,

@@ -4,7 +4,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
 
-namespace PSETW.Shared;
+namespace PSEtw.Shared;
 
 public class LoadContext : AssemblyLoadContext
 {
@@ -17,7 +17,7 @@ public class LoadContext : AssemblyLoadContext
     private string _assemblyDir;
 
     private LoadContext(string mainModulePathAssemblyPath)
-        : base (name: "PSETW", isCollectible: false)
+        : base (name: "PSEtw", isCollectible: false)
     {
         _assemblyDir = Path.GetDirectoryName(mainModulePathAssemblyPath) ?? "";
         _thisAssembly = typeof(LoadContext).Assembly;

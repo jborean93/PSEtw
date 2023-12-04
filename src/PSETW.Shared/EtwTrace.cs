@@ -1,3 +1,4 @@
+using PSEtw.Shared.Native;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -5,9 +6,8 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using PSETW.Native;
 
-namespace PSETW;
+namespace PSEtw.Shared;
 
 public sealed class ETWEventArgs : EventArgs
 {
@@ -19,7 +19,7 @@ public sealed class ETWEventArgs : EventArgs
     public string Message { get; set; }
 }
 
-internal sealed class Trace : IDisposable
+public sealed class EtwTrace : IDisposable
 {
     private Advapi32.EVENT_TRACE_LOGFILEW _logFile = new();
     private long _handle = 0;
@@ -28,7 +28,7 @@ internal sealed class Trace : IDisposable
 
     public event EventHandler<ETWEventArgs>? EventReceived;
 
-    internal Trace(nint loggerName)
+    internal EtwTrace(nint loggerName)
     {
         _delegate = new(EventRecordCallback);
 
@@ -213,5 +213,5 @@ internal sealed class Trace : IDisposable
         }
         GC.SuppressFinalize(this);
     }
-    ~Trace() => Dispose(false);
+    ~EtwTrace() => Dispose(false);
 }

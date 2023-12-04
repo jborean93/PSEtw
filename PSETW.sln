@@ -5,7 +5,7 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{79DC99EE-479B-4054-B6D2-9F5137C1D907}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PSETW", "src\PSETW\PSETW.csproj", "{4524C249-BAFE-448F-A9BB-A68BE244D65B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PSEtw", "src\PSEtw\PSEtw.csproj", "{4524C249-BAFE-448F-A9BB-A68BE244D65B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

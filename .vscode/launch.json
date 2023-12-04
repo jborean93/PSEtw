@@ -13,7 +13,7 @@
                 "-NoExit",
                 "-NoProfile",
                 "-Command",
-                "Import-Module ./output/PSETW"
+                "Import-Module ./output/PSEtw"
             ],
             "cwd": "${workspaceFolder}",
             "stopAtEntry": false,
