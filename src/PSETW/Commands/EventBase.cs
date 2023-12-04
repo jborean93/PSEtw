@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
 using System.Management.Automation.Language;
+using System.Text.RegularExpressions;
 using PSETW.Native;
 
 namespace PSETW.Commands;
@@ -41,7 +42,7 @@ internal sealed class KeywordCompleter : IArgumentCompleter
                 pattern.IsMatch(name) || pattern.IsMatch(description)
             )
             {
-                yield return new(name, name, CompletionResultType.Text, description);
+                yield return CompletionHelper.GenerateResult(name, description);
             }
         }
 
@@ -153,7 +154,7 @@ internal sealed class LevelCompletor : IArgumentCompleter
                 pattern.IsMatch(name) || pattern.IsMatch(description)
             )
             {
-                yield return new(name, name, CompletionResultType.Text, description);
+                yield return CompletionHelper.GenerateResult(name, description);
             }
         }
 
@@ -233,7 +234,7 @@ internal sealed class ProviderCompleter : IArgumentCompleter
                 pattern.IsMatch(name) || pattern.IsMatch(value)
             )
             {
-                yield return new(name, name, CompletionResultType.Text, $"Provider Guid: {value}");
+                yield return CompletionHelper.GenerateResult(name, $"Provider Guid: {value}");
             }
         }
     }
@@ -288,8 +289,27 @@ internal sealed class SessionNameCompletor : IArgumentCompleter
         {
             if (name.StartsWith(wordToComplete, StringComparison.OrdinalIgnoreCase) || pattern.IsMatch(name))
             {
-                yield return new(name);
+                yield return CompletionHelper.GenerateResult(name, $"ETW Session {name}");
             }
         }
+    }
+}
+
+internal sealed class CompletionHelper
+{
+    public static CompletionResult GenerateResult(string value, string toolTip)
+    {
+        string completionText = value;
+        if (Regex.Match(completionText, @"(^[<>@#])|([$\s'\u2018\u2019\u201a\u201b\u201c\u201d\u201e""`,;(){}|&])").Success)
+        {
+            completionText = $"'{CodeGeneration.EscapeSingleQuotedStringContent(completionText)}'";
+        }
+
+        return new(
+            completionText,
+            value,
+            CompletionResultType.ParameterValue,
+            toolTip
+        );
     }
 }

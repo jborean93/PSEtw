@@ -13,12 +13,7 @@ internal static class PSETWGlobals
         {
             if (_defaultETWSession == null)
             {
-#if NET472
-                int procId = Process.GetCurrentProcess().Id;
-#else
-                int procId = Environment.ProcessId;
-#endif
-                string name = $"PSETW-P{procId}";
+                string name = typeof(PSETWGlobals).Assembly.GetName().Name!;
 
                 _defaultETWSession = TraceSession.Create(name);
             }

@@ -19,7 +19,7 @@ public sealed class ETWEventArgs : EventArgs
     public string Message { get; set; }
 }
 
-public sealed class Trace : IDisposable
+internal sealed class Trace : IDisposable
 {
     private Advapi32.EVENT_TRACE_LOGFILEW _logFile = new();
     private long _handle = 0;

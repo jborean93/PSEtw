@@ -6,7 +6,7 @@ using PSETW.Native;
 
 namespace PSETW;
 
-public sealed class TraceSession : IDisposable
+internal sealed class TraceSession : IDisposable
 {
     private SafeETWTraceSession _session;
 
