@@ -41,7 +41,7 @@ internal static class EtwApi
             if (res != 0)
             {
                 Marshal.FreeHGlobal(buffer);
-                throw new Win32Exception();
+                throw new Win32Exception(res);
             }
 
             return new(handle, buffer);
@@ -49,46 +49,27 @@ internal static class EtwApi
     }
 
     public static SafeEtwTraceSession OpenTraceSession(string name)
+        => ControlTraceByName(name, EventTraceControl.EVENT_TRACE_CONTROL_QUERY);
+
+    public static void RemoveTraceSession(string name)
     {
-        if (name.Length > 1024)
-        {
-            throw new ArgumentException(
-                "Trace session name must not be more than 1024 characters",
-                nameof(name));
-        }
+        ControlTraceByName(name, EventTraceControl.EVENT_TRACE_CONTROL_STOP).Dispose();
+    }
 
-        int propsLength = Marshal.SizeOf<Advapi32.EVENT_TRACE_PROPERTIES_V2>();
-        int bufferSize = propsLength + 4096;
-        long handle = 0;
-        nint buffer = Marshal.AllocHGlobal(bufferSize);
-
+    public static void RemoveTraceSession(SafeEtwTraceSession session)
+    {
         unsafe
         {
-            new Span<byte>((void*)buffer, propsLength).Fill(0);
-            Advapi32.EVENT_TRACE_PROPERTIES_V2* props = (Advapi32.EVENT_TRACE_PROPERTIES_V2*)buffer;
-            props->Wnode.BufferSize = bufferSize;
-            props->LoggerNameOffset = propsLength;
-            props->LogFileNameOffset = propsLength + 2048;
-            props->V2Control = 2;
-
-            int res;
-            fixed (char* namePtr = name)
-            {
-                res = Advapi32.ControlTraceW(
-                    0,
-                    namePtr,
-                    buffer,
-                    EventTraceControl.EVENT_TRACE_CONTROL_QUERY);
-            }
+            int res = Advapi32.ControlTraceW(
+                session.DangerousGetTraceHandle(),
+                null,
+                session.DangerousGetHandle(),
+                EventTraceControl.EVENT_TRACE_CONTROL_STOP);
 
             if (res != 0)
             {
-                Marshal.FreeHGlobal(buffer);
-                throw new Win32Exception();
+                throw new Win32Exception(res);
             }
-            handle = props->Wnode.HistoricalContext;
-
-            return new(handle, buffer);
         }
     }
 
@@ -117,6 +98,65 @@ internal static class EtwApi
         if (res != 0)
         {
             throw new Win32Exception(res);
+        }
+    }
+
+    public static void ProcessTrace(Span<long> handles)
+    {
+        unsafe
+        {
+            fixed (long* handlesPtr = handles)
+            {
+                Advapi32.ProcessTrace(
+                    (nint)handlesPtr,
+                    handles.Length,
+                    IntPtr.Zero,
+                    IntPtr.Zero);
+            }
+        }
+    }
+
+    private static SafeEtwTraceSession ControlTraceByName(
+            string name,
+            EventTraceControl controlCode)
+    {
+        if (name.Length > 1024)
+        {
+            throw new ArgumentException(
+                "Trace session name must not be more than 1024 characters",
+                nameof(name));
+        }
+
+        int propsLength = Marshal.SizeOf<Advapi32.EVENT_TRACE_PROPERTIES_V2>();
+        int bufferSize = propsLength + 4096;
+        nint buffer = Marshal.AllocHGlobal(bufferSize);
+
+        unsafe
+        {
+            new Span<byte>((void*)buffer, propsLength).Fill(0);
+            Advapi32.EVENT_TRACE_PROPERTIES_V2* props = (Advapi32.EVENT_TRACE_PROPERTIES_V2*)buffer;
+            props->Wnode.BufferSize = bufferSize;
+            props->LoggerNameOffset = propsLength;
+            props->LogFileNameOffset = propsLength + 2048;
+            props->V2Control = 2;
+
+            int res;
+            fixed (char* namePtr = name)
+            {
+                res = Advapi32.ControlTraceW(
+                    0,
+                    namePtr,
+                    buffer,
+                    controlCode);
+            }
+
+            if (res != 0)
+            {
+                Marshal.FreeHGlobal(buffer);
+                throw new Win32Exception(res);
+            }
+
+            return new(props->Wnode.HistoricalContext, buffer);
         }
     }
 }

@@ -18,13 +18,13 @@ public sealed class EtwTraceSession : IDisposable
         Name = name;
     }
 
-    public static EtwTraceSession Create(string name)
+    internal static EtwTraceSession Create(string name)
     {
         SafeEtwTraceSession sessionHandle = EtwApi.CreateTraceSession(name);
         return new(sessionHandle, name);
     }
 
-    public static EtwTraceSession Open(string name)
+    internal static EtwTraceSession Open(string name)
     {
         SafeEtwTraceSession sessionHandle = EtwApi.OpenTraceSession(name);
         return new(sessionHandle, name);

@@ -180,19 +180,7 @@ public sealed class EtwTrace : IDisposable
 
     private static void ProcessTrace(long handle)
     {
-        Span<long> handles = stackalloc[] { handle };
-
-        unsafe
-        {
-            fixed (long* handlesPtr = handles)
-            {
-                Advapi32.ProcessTrace(
-                    (nint)handlesPtr,
-                    1,
-                    IntPtr.Zero,
-                    IntPtr.Zero);
-            }
-        }
+        EtwApi.ProcessTrace(stackalloc[] { handle });
     }
 
     public void Dispose() => Dispose(true);
