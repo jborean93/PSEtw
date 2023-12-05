@@ -8,7 +8,9 @@ namespace PSEtw.Shared;
 
 internal static class EtwApi
 {
-    public static SafeEtwTraceSession CreateTraceSession(string name)
+    public static SafeEtwTraceSession CreateTraceSession(
+        string name,
+        bool isSystemLogger = false)
     {
         if (name.Length > 1024)
         {
@@ -30,6 +32,10 @@ internal static class EtwApi
             props->Wnode.ClientContext = 1;  // Query Performance Counter (QPC).
             props->Wnode.Flags = WNodeFlag.WNODE_FLAG_TRACED_GUID | WNodeFlag.WNODE_FLAG_VERSIONED_PROPERTIES;
             props->LogFileMode = EventTraceMode.EVENT_TRACE_REAL_TIME_MODE;
+            if (isSystemLogger)
+            {
+                props->LogFileMode |= EventTraceMode.EVENT_TRACE_SYSTEM_LOGGER_MODE;
+            }
             props->LoggerNameOffset = propsLength;
             props->V2Control = 2;
 

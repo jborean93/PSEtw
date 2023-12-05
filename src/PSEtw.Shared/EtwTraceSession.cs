@@ -1,8 +1,5 @@
 using PSEtw.Shared.Native;
 using System;
-using System.ComponentModel;
-using System.Runtime.InteropServices;
-using System.Text;
 
 namespace PSEtw.Shared;
 
@@ -30,7 +27,7 @@ public sealed class EtwTraceSession : IDisposable
         return new(sessionHandle, name);
     }
 
-    public void EnableTrace(
+    internal void EnableTrace(
         Guid providerId,
         int controlCode,
         byte level,
@@ -40,7 +37,7 @@ public sealed class EtwTraceSession : IDisposable
         EtwApi.EnableTrace(_session, providerId, controlCode, level, matchAnyKeyword, matchAllKeyword);
     }
 
-    public EtwTrace OpenTrace()
+    internal EtwTrace OpenTrace()
     {
         nint sessionNamePtr = IntPtr.Zero;
         unsafe
