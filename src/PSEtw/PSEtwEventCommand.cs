@@ -248,10 +248,10 @@ public sealed class RegisterPSEtwEventCommand : PSEtwEventBase
 }
 
 [Cmdlet(VerbsDiagnostic.Trace, "PSEtwEvent", DefaultParameterSetName = DEFAULT_PARAM_SET)]
-[OutputType(typeof(ETWEventArgs))]
+[OutputType(typeof(EtwEventArgs))]
 public sealed class TracePSEtwEventCommand : PSEtwEventBase
 {
-    private BlockingCollection<ETWEventArgs> _events = new();
+    private BlockingCollection<EtwEventArgs> _events = new();
 
     protected override void StartTrace(EtwTrace trace)
     {
@@ -260,14 +260,14 @@ public sealed class TracePSEtwEventCommand : PSEtwEventBase
             trace.EventReceived += EventReceived;
             trace.Start();
 
-            foreach (ETWEventArgs args in _events.GetConsumingEnumerable())
+            foreach (EtwEventArgs args in _events.GetConsumingEnumerable())
             {
                 WriteObject(args);
             }
         }
     }
 
-    private void EventReceived(object? sender, ETWEventArgs args)
+    private void EventReceived(object? sender, EtwEventArgs args)
     {
         if (!_events.IsAddingCompleted)
         {

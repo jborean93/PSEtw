@@ -47,26 +47,4 @@ public sealed class PSEtwEvent : EventSource
     [Event(9, Keywords = Keywords.Bar)]
     public void KeywordCustomBar(int myId)
         => WriteEvent(9, myId);
-
-    // [Event(3, Level = EventLevel.Critical)]
-    // public void LevelCritical(int myId)
-    //     => WriteEvent(3, myId);
-
-    // [Event(1, Keywords = Keywords.MyKeywordFoo, Level = EventLevel.Verbose)]
-    // public void MeyKeywordFooVerbose(string myName, int myId)
-    // {
-    //     WriteEvent(1, myName, myId);
-    // }
-
-    // [Event(1, Keywords = Keywords.MyKeywordFoo, Level = EventLevel.Verbose)]
-    // public void MeyKeywordFooVerbose(string myName, int myId)
-    // {
-    //     WriteEvent(1, myName, myId);
-    // }
-
-    // [Event(2)]
-    // public void MySecondEvent(int myId)
-    // {
-    //     WriteEvent(2, myId);
-    // }
 }
