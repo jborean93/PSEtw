@@ -12,10 +12,17 @@ Starts an ETW Trace for the provider specified.
 
 ## SYNTAX
 
+### Single (Default)
 ```
 Trace-PSEtwEvent [-SessionName <String>] -Provider <ProviderStringOrGuid>
- [-KeywordsAny <KeywordsStringOrLong[]>] [-KeywordsAll <KeywordsStringOrLong[]>] [-Level <LevelStringOrInt[]>]
+ [-KeywordsAny <KeywordsStringOrLong[]>] [-KeywordsAll <KeywordsStringOrLong[]>] [-Level <LevelStringOrInt>]
  [-ProgressAction <ActionPreference>] [<CommonParameters>]
+```
+
+### Multi
+```
+Trace-PSEtwEvent [-SessionName <String>] -TraceInfo <EtwEventInfo[]> [-ProgressAction <ActionPreference>]
+ [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -37,7 +44,7 @@ PS C:\> {{ Add example code here }}
 
 ```yaml
 Type: KeywordsStringOrLong[]
-Parameter Sets: (All)
+Parameter Sets: Single
 Aliases:
 
 Required: False
@@ -52,7 +59,7 @@ Accept wildcard characters: False
 
 ```yaml
 Type: KeywordsStringOrLong[]
-Parameter Sets: (All)
+Parameter Sets: Single
 Aliases:
 
 Required: False
@@ -66,8 +73,8 @@ Accept wildcard characters: False
 {{ Fill Level Description }}
 
 ```yaml
-Type: LevelStringOrInt[]
-Parameter Sets: (All)
+Type: LevelStringOrInt
+Parameter Sets: Single
 Aliases:
 
 Required: False
@@ -97,7 +104,7 @@ Accept wildcard characters: False
 
 ```yaml
 Type: ProviderStringOrGuid
-Parameter Sets: (All)
+Parameter Sets: Single
 Aliases:
 
 Required: True
@@ -113,12 +120,27 @@ Accept wildcard characters: False
 ```yaml
 Type: String
 Parameter Sets: (All)
-Aliases:
+Aliases: Name
 
 Required: False
 Position: Named
 Default value: None
 Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -TraceInfo
+{{ Fill TraceInfo Description }}
+
+```yaml
+Type: EtwEventInfo[]
+Parameter Sets: Multi
+Aliases:
+
+Required: True
+Position: Named
+Default value: None
+Accept pipeline input: True (ByPropertyName, ByValue)
 Accept wildcard characters: False
 ```
 

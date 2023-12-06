@@ -11,6 +11,9 @@ Locale: en-US
 ETW consumer for PowerShell.
 
 ## PSEtw Cmdlets
+### [New-PSEtwEventInfo](New-PSEtwEventInfo.md)
+Create a trace info object used for filtering traces with an ETW event.
+
 ### [New-PSEtwSession](New-PSEtwSession.md)
 Creates a new ETW Trace Session.
 

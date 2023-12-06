@@ -1,11 +1,11 @@
 using PSEtw.Shared;
-using System;
-using System.Diagnostics;
 
 namespace PSEtw;
 
-internal static class PSETWGlobals
+internal static class PSEtwGlobals
 {
+    internal static string DEFAULT_SESSION_NAME = typeof(PSEtwGlobals).Assembly.GetName().Name!;
+
     private static EtwTraceSession? _defaultETWSession = null;
 
     public static EtwTraceSession DefaultETWSession
@@ -14,12 +14,16 @@ internal static class PSETWGlobals
         {
             if (_defaultETWSession == null)
             {
-                string name = typeof(PSETWGlobals).Assembly.GetName().Name!;
-
-                _defaultETWSession = EtwTraceSession.Create(name);
+                _defaultETWSession = EtwTraceSession.OpenOrCreate(DEFAULT_SESSION_NAME, isSystemLogger: true);
             }
 
             return _defaultETWSession;
         }
+    }
+
+    public static void RemoveDefaultSession()
+    {
+        _defaultETWSession?.Dispose();
+        _defaultETWSession = null;
     }
 }

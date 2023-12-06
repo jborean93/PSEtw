@@ -12,9 +12,15 @@ Creates a new ETW Trace Session.
 
 ## SYNTAX
 
+### Name (Default)
 ```
-New-PSEtwSession [-SessionName] <String[]> [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm]
- [<CommonParameters>]
+New-PSEtwSession [-SystemLogger] [-SessionName] <String[]> [-ProgressAction <ActionPreference>] [-WhatIf]
+ [-Confirm] [<CommonParameters>]
+```
+
+### Default
+```
+New-PSEtwSession [-Default] [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -34,7 +40,40 @@ PS C:\> $session | Remove-PSEtwSession
 
 Creates a new ETW Trace Session called `MySession` then removes it.
 
+### Example 2 - Creates the default PSEtw Session
+```powershell
+PS C:\> New-PSEtwSession -Default
+```
+
+Creates the default ETW Trace Session used by this module when no explicit session was specified.
+This requires admin access to perform as it is created as a System logger.
+
+### Example 3 - Create system logger session
+```powershell
+PS C:\> New-PSEtwSession -Name MySession -SystemLogger
+```
+
+Creates a new ETW Trace Session called `MySession` with the flag `EVENT_TRACE_SYSTEM_LOGGER_MODE` set.
+A system logger session can trace other processes but requires admin access to create.
+
 ## PARAMETERS
+
+### -Default
+Creates the default ETW Trace Session used by this module called `PSEtw`.
+Always implies `-SystemLogger` is set to ensure the trace session can trace other processes.
+The default Trace Session is used if no `-SessionName` is specified with [Registser-PSEtwEvent](./Register-PSEtwEvent.md) or [Trace-PSEtwEvent](./Trace-PSEtwEvent.md).
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Default
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
 
 ### -ProgressAction
 New common parameter introduced in PowerShell 7.4.
@@ -57,13 +96,30 @@ A session name cannot exceed 1024 characters, is case insensitive, and must be u
 
 ```yaml
 Type: String[]
-Parameter Sets: (All)
+Parameter Sets: Name
 Aliases: Name
 
 Required: True
 Position: 0
 Default value: None
 Accept pipeline input: True (ByPropertyName, ByValue)
+Accept wildcard characters: False
+```
+
+### -SystemLogger
+Will create the trace session with the `EVENT_TRACE_SYSTEM_LOGGER_MODE` flag.
+This flag allows the trace session to trace other processes and not just the current process.
+This requires the current user to be a member of the local Administrators group.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Name
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
 Accept wildcard characters: False
 ```
 

@@ -12,9 +12,15 @@ Removes an existing ETW Trace Session.
 
 ## SYNTAX
 
+### Name (Default)
 ```
 Remove-PSEtwSession [-SessionName] <String[]> [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm]
  [<CommonParameters>]
+```
+
+### Default
+```
+Remove-PSEtwSession [-Default] [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -32,6 +38,22 @@ PS C:\> $session | Remove-PSEtwSession
 Creates a new ETW Trace Session called `MySession` then removes it.
 
 ## PARAMETERS
+
+### -Default
+Removes the default Trace Session used by `PSEtw`.
+The default Trace Session is used if no `-SessionName` is specified with [Registser-PSEtwEvent](./Register-PSEtwEvent.md) or [Trace-PSEtwEvent](./Trace-PSEtwEvent.md).
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Default
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
 
 ### -ProgressAction
 New common parameter introduced in PowerShell 7.4.
@@ -53,7 +75,7 @@ The ETW Trace Session name to remove.
 
 ```yaml
 Type: String[]
-Parameter Sets: (All)
+Parameter Sets: Name
 Aliases: Name
 
 Required: True

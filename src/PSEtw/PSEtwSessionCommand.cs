@@ -5,27 +5,44 @@ using System.ComponentModel;
 using System.Linq;
 using System.Management.Automation;
 
-namespace PSEtw.Commands;
+namespace PSEtw;
 
 public abstract class PSEtwCommandBase : PSCmdlet
 {
+    internal const string DEFAULT_PARAM_SET = "Name";
+
     [Parameter(
         Mandatory = true,
         Position = 0,
         ValueFromPipeline = true,
-        ValueFromPipelineByPropertyName = true
+        ValueFromPipelineByPropertyName = true,
+        ParameterSetName = DEFAULT_PARAM_SET
     )]
     [Alias("Name")]
     public virtual string[] SessionName { get; set; } = Array.Empty<string>();
 
+    [Parameter(
+        ParameterSetName = "Default"
+    )]
+    public SwitchParameter Default { get; set; }
+
     protected override void ProcessRecord()
     {
-        foreach (string name in SessionName)
+        string[] names;
+        if (Default)
+        {
+            names = new[] { PSEtwGlobals.DEFAULT_SESSION_NAME };
+        }
+        else
+        {
+            names = SessionName;
+        }
+
+        foreach (string name in names)
         {
             try
             {
                 ProcessName(name);
-
             }
             catch (ArgumentException e)
             {
@@ -51,27 +68,39 @@ public abstract class PSEtwCommandBase : PSCmdlet
     protected abstract void ProcessName(string name);
 }
 
-[Cmdlet(VerbsCommon.New, "PSEtwSession", SupportsShouldProcess = true)]
+[Cmdlet(VerbsCommon.New, "PSEtwSession", SupportsShouldProcess = true, DefaultParameterSetName = DEFAULT_PARAM_SET)]
 [OutputType(typeof(EtwTraceSession))]
 public sealed class NewPSEtwCommand : PSEtwCommandBase
 {
+    [Parameter(
+        ParameterSetName = DEFAULT_PARAM_SET
+    )]
+    public SwitchParameter SystemLogger { get; set; }
+
     protected override void ProcessName(string name)
     {
         if (ShouldProcess(name, "create"))
         {
-            WriteObject(EtwTraceSession.Create(name));
+            bool isSystemLogger = SystemLogger;
+            if (string.Equals(name, PSEtwGlobals.DEFAULT_SESSION_NAME, StringComparison.OrdinalIgnoreCase))
+            {
+                isSystemLogger = true;
+            }
+
+            WriteObject(EtwTraceSession.Create(name, isSystemLogger: isSystemLogger));
         }
     }
 }
 
-[Cmdlet(VerbsCommon.Remove, "PSEtwSession", SupportsShouldProcess = true)]
+[Cmdlet(VerbsCommon.Remove, "PSEtwSession", SupportsShouldProcess = true, DefaultParameterSetName = DEFAULT_PARAM_SET)]
 public sealed class RemovePSEtwCommand : PSEtwCommandBase
 {
     [Parameter(
         Mandatory = true,
         Position = 0,
         ValueFromPipeline = true,
-        ValueFromPipelineByPropertyName = true
+        ValueFromPipelineByPropertyName = true,
+        ParameterSetName = DEFAULT_PARAM_SET
     )]
     [Alias("Name")]
     [ArgumentCompleter(typeof(SessionNameCompletor))]
@@ -79,14 +108,19 @@ public sealed class RemovePSEtwCommand : PSEtwCommandBase
 
     protected override void ProcessName(string name)
     {
-        if (ShouldProcess(name, "create"))
+        if (ShouldProcess(name, "remove"))
         {
+            if (string.Equals(name, PSEtwGlobals.DEFAULT_SESSION_NAME, StringComparison.OrdinalIgnoreCase))
+            {
+                PSEtwGlobals.RemoveDefaultSession();
+            }
+
             EtwApi.RemoveTraceSession(name);
         }
     }
 }
 
-[Cmdlet(VerbsDiagnostic.Test, "PSEtwSession")]
+[Cmdlet(VerbsDiagnostic.Test, "PSEtwSession", DefaultParameterSetName = DEFAULT_PARAM_SET)]
 [OutputType(typeof(bool))]
 public sealed class TestPSEtwSessionCommand : PSEtwCommandBase
 {

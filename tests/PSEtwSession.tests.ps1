@@ -7,6 +7,7 @@ Describe "New-PSEtwSession" {
         $actual = New-PSEtwSession -SessionName $name
         try {
             $actual.Name | Should -Be $name
+            $actual.IsSystemLogger | Should -BeFalse
             $actual | Should -BeOfType ([PSEtw.Shared.EtwTraceSession])
             Test-PSEtwSession -Name $name | Should -BeTrue
         }
@@ -21,6 +22,36 @@ Describe "New-PSEtwSession" {
         $actual = New-PSEtwSession -SessionName $name -WhatIf
         $actual | Should -BeNullOrEmpty
         Test-PSEtwSession -Name $name | Should -BeFalse
+    }
+
+    It "Creates system logger" -Skip:(-not $IsAdmin) {
+        $name = "PSEtw-Test-$([Guid]::NewGuid())"
+
+        $actual = New-PSEtwSession -SessionName $name -SystemLogger
+        try {
+            $actual.Name | Should -Be $name
+            $actual.IsSystemLogger | Should -BeTrue
+            $actual | Should -BeOfType ([PSEtw.Shared.EtwTraceSession])
+            Test-PSEtwSession -Name $name | Should -BeTrue
+        }
+        finally {
+            $actual | Remove-PSEtwSession
+        }
+    }
+
+    It "Creates default ETW Session" -Skip:(-not $IsAdmin) {
+        Test-PSEtwSession -Name PSEtw | Should -BeFalse
+
+        $actual = New-PSEtwSession -Default
+        try {
+            $actual.Name | Should -Be PSEtw
+            $actual.IsSystemLogger | Should -BeTrue
+            $actual | Should -BeOfType ([PSEtw.Shared.EtwTraceSession])
+            Test-PSEtwSession -Name PSEtw | Should -BeTrue
+        }
+        finally {
+            $actual | Remove-PSEtwSession
+        }
     }
 
     It "Fails to create session that already exists" {
@@ -79,6 +110,20 @@ Describe "Remove-PSEtwSession" {
         }
 
         Test-PSEtwSession -Name $name | Should -BeFalse
+    }
+
+    It "Removes default ETW Session" -Skip:(-not $IsAdmin) {
+        Test-PSEtwSession -Name PSEtw | Should -BeFalse
+
+        New-PSEtwSession -Default | Out-Null
+        try {
+            Test-PSEtwSession -Name PSEtw | Should -BeTrue
+        }
+        finally {
+            Remove-PSEtwSession -Default
+        }
+
+        Test-PSEtwSession -Name PSEtw | Should -BeFalse
     }
 
     It "Completes with existing ETW session names" {
@@ -176,5 +221,17 @@ Describe "Test-PSEtwSession" {
         Test-PSEtwSession -SessionName $name | Should -BeFalse
         Test-PSEtwSession -Name $name | Should -BeFalse
         $name | Test-PSEtwSession | Should -BeFalse
+    }
+
+    It "Tests default ETW Session" -Skip:(-not $IsAdmin) {
+        Test-PSEtwSession -Default | Should -BeFalse
+
+        $actual = New-PSEtwSession -Default
+        try {
+            Test-PSEtwSession -Default | Should -BeTrue
+        }
+        finally {
+            $actual | Remove-PSEtwSession
+        }
     }
 }

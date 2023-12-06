@@ -12,8 +12,14 @@ Tests if an ETW Trace Session exists or not.
 
 ## SYNTAX
 
+### Name (Default)
 ```
 Test-PSEtwSession [-SessionName] <String[]> [-ProgressAction <ActionPreference>] [<CommonParameters>]
+```
+
+### Default
+```
+Test-PSEtwSession [-Default] [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -31,6 +37,22 @@ PS C:\> if (Test-PSEtwSession -SessionName MySession) {
 Checks if the session specified exists before removing it.
 
 ## PARAMETERS
+
+### -Default
+Tests whether the default Trace Session used by PSEtw exists or not.
+The default Trace Session is used if no `-SessionName` is specified with [Registser-PSEtwEvent](./Register-PSEtwEvent.md) or [Trace-PSEtwEvent](./Trace-PSEtwEvent.md).
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Default
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
 
 ### -ProgressAction
 New common parameter introduced in PowerShell 7.4.
@@ -52,7 +74,7 @@ The name of the ETW Trace Session to check.
 
 ```yaml
 Type: String[]
-Parameter Sets: (All)
+Parameter Sets: Name
 Aliases: Name
 
 Required: True

@@ -125,9 +125,9 @@ internal static class ProviderHelper
         return sessionNames.ToArray();
     }
 
-    public static FieldInfo[] GetProviderFieldInfo(Guid provider, EventFieldType fieldType)
+    public static ProviderFieldInfo[] GetProviderFieldInfo(Guid provider, EventFieldType fieldType)
     {
-        List<FieldInfo> finalRes = new();
+        List<ProviderFieldInfo> finalRes = new();
 
         nint buffer = IntPtr.Zero;
         int bufferSize = 0;
@@ -188,41 +188,16 @@ internal static class ProviderHelper
     }
 }
 
-internal sealed class FieldInfo
+internal sealed class ProviderFieldInfo
 {
     public string Name { get; }
     public string Description { get; }
     public long Value { get; }
 
-    public FieldInfo(string name, string description, long value)
+    public ProviderFieldInfo(string name, string description, long value)
     {
         Name = name;
         Description = description;
         Value = value;
-    }
-}
-
-internal sealed class SafeEtwTraceSession : SafeHandle
-{
-    private long _sessionHandle = 0;
-
-    public SafeEtwTraceSession(long handle, nint buffer) : base(buffer, true)
-    {
-        _sessionHandle = handle;
-    }
-
-    public override bool IsInvalid => _sessionHandle != 0 || handle != IntPtr.Zero;
-
-    internal long DangerousGetTraceHandle() => _sessionHandle;
-
-    protected override bool ReleaseHandle()
-    {
-        int res = 0;
-        if (handle != IntPtr.Zero)
-        {
-            Marshal.FreeHGlobal(handle);
-            handle = IntPtr.Zero;
-        }
-        return res == 0;
     }
 }

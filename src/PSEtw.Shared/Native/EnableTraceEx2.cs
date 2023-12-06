@@ -35,7 +35,7 @@ internal partial class Advapi32
     [DllImport("Advapi32.dll")]
     public unsafe static extern int EnableTraceEx2(
         long TraceHandle,
-        ref Guid ProviderId,
+        Guid* ProviderId,
         int ControlCode,
         byte Level,
         long MatchAnyKeyword,
