@@ -198,7 +198,7 @@ public sealed class RegisterPSEtwEventCommand : PSEtwEventBase
 
     private MethodInfo _disposeMeth = typeof(RegisterPSEtwEventCommand).GetMethod(
         nameof(DisposeEventTrace),
-        BindingFlags.Static | BindingFlags.Static)!;
+        BindingFlags.Public | BindingFlags.Static)!;
 
     [Parameter]
     public ScriptBlock? Action { get; set; }

@@ -39,8 +39,8 @@ $ErrorActionPreference = 'Stop'
 
 $configuration = [PesterConfiguration]::Default
 $configuration.Output.Verbosity = 'Detailed'
-$configuration.Run.Exit = $true
 $configuration.Run.Path = $TestPath
+$configuration.Run.Throw = $true
 $configuration.TestResult.Enabled = $true
 $configuration.TestResult.OutputPath = $OutputFile
 $configuration.TestResult.OutputFormat = 'NUnitXml'

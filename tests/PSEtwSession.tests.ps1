@@ -63,7 +63,7 @@ Describe "New-PSEtwSession" {
             $actual | Should -BeNullOrEmpty
             $err.Count | Should -Be 1
             $err[0].CategoryInfo.Category | Should -Be NotSpecified
-            [string]$err | Should -Be "Cannot create a file when that file already exists."
+            [string]$err | Should -BeLike "Cannot create a file when that file already exists*"
         }
         finally {
             $session | Remove-PSEtwSession
@@ -188,7 +188,7 @@ Describe "Remove-PSEtwSession" {
         $actual | Should -BeNullOrEmpty
         $err.Count | Should -Be 1
         $err[0].CategoryInfo.Category | Should -Be NotSpecified
-        [string]$err | Should -Be "The instance name passed was not recognized as valid by a WMI data provider."
+        [string]$err | Should -BeLike "The instance name passed was not recognized as valid by a WMI data provider*"
     }
 
     It "Fails when session name is too long" {

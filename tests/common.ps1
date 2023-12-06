@@ -1,4 +1,6 @@
 using namespace System.IO
+using namespace System.Management.Automation
+using namespace System.Management.Automation.Runspaces
 using namespace System.Security.Principal
 
 $moduleName = (Get-Item ([IO.Path]::Combine($PSScriptRoot, '..', 'module', '*.psd1'))).BaseName
@@ -53,4 +55,41 @@ Function Global:Uninstall-TestEtwProvider {
         }
     }
 
+}
+
+Function Global:Invoke-WithTestEtwProvider {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, Position = 0)]
+        [ScriptBlock]
+        $ScriptBlock
+    )
+
+    $etwAssembly = [Path]::Combine($PSScriptRoot, 'PSEtwProvider', 'bin', 'Release', 'netstandard2.0', 'publish', 'PSEtwProvider.dll')
+
+    $params = @{
+        FilePath = (Get-Process -Id $pid).Path
+        WindowStyle = 'Hidden'
+        WorkingDirectory = $pwd.Path
+        PassThru = $true
+    }
+    $proc = Start-Process @params
+    try {
+        $connInfo = [NamedPipeConnectionInfo]::new($proc.Id)
+        $rs = [RunspaceFactory]::CreateRunspace($connInfo)
+        $rs.Open()
+
+        $ps = [PowerShell]::Create()
+        $ps.Runspace = $rs
+        [void]$ps.AddCommand("Add-Type").AddParameter("LiteralPath", $etwAssembly).AddStatement()
+        [void]$ps.AddScript('$global:logger = [PSEtwProvider.PSEtwEvent]::new()').AddStatement()
+        [void]$ps.AddScript($ScriptBlock)
+        [void]$ps.Invoke()
+    }
+    catch {
+        $PSCmdlet.WriteError($_)
+    }
+    finally {
+        $proc | Stop-Process -Force -ErrorAction SilentlyContinue
+    }
 }
