@@ -90,6 +90,19 @@ internal static class EtwApi
         }
     }
 
+    public static SafeEtwTrace OpenTrace(Advapi32.EVENT_TRACE_LOGFILEW logFile)
+    {
+        long handle = Advapi32.OpenTraceW(ref logFile);
+        long invalidHandle = Environment.Is64BitProcess ? -1 : 0xFFFFFFFF;
+        if (handle == invalidHandle)
+        {
+            handle = 0;
+            throw new Win32Exception();
+        }
+
+        return new(handle);
+    }
+
     public static void ProcessTrace(Span<long> handles)
     {
         unsafe
@@ -147,5 +160,56 @@ internal static class EtwApi
 
             return new(props->Wnode.HistoricalContext, buffer);
         }
+    }
+}
+
+
+internal sealed class SafeEtwTraceSession : SafeHandle
+{
+    private long _sessionHandle = 0;
+
+    public SafeEtwTraceSession(long handle, nint buffer) : base(buffer, true)
+    {
+        _sessionHandle = handle;
+    }
+
+    public override bool IsInvalid => _sessionHandle != 0 || handle != IntPtr.Zero;
+
+    internal long DangerousGetTraceHandle() => _sessionHandle;
+
+    protected override bool ReleaseHandle()
+    {
+        int res = 0;
+        if (handle != IntPtr.Zero)
+        {
+            Marshal.FreeHGlobal(handle);
+            handle = IntPtr.Zero;
+        }
+        return res == 0;
+    }
+}
+
+internal sealed class SafeEtwTrace : SafeHandle
+{
+    private long _traceHandle = 0;
+
+    public SafeEtwTrace(long handle) : base(IntPtr.Zero, true)
+    {
+        _traceHandle = handle;
+    }
+
+    public override bool IsInvalid => _traceHandle == 0;
+
+    internal long DangerousGetTraceHandle() => _traceHandle;
+
+    protected override bool ReleaseHandle()
+    {
+        int res = 0;
+        if (_traceHandle != 0)
+        {
+            res = Advapi32.CloseTrace(_traceHandle);
+        }
+
+        return res == 0;
     }
 }

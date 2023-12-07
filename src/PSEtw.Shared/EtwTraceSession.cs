@@ -19,11 +19,27 @@ public sealed class EtwTraceSession : IDisposable
         {
             unsafe
             {
-                nint buffer = _session.DangerousGetHandle();
-                Advapi32.EVENT_TRACE_PROPERTIES_V2* props = (Advapi32.EVENT_TRACE_PROPERTIES_V2*)buffer;
+                Advapi32.EVENT_TRACE_PROPERTIES_V2* props = TraceProperties;
                 return (props->LogFileMode & EventTraceMode.EVENT_TRACE_SYSTEM_LOGGER_MODE) != 0;
             }
         }
+    }
+
+    internal nint SessionNamePtr
+    {
+        get
+        {
+            unsafe
+            {
+                int offset = TraceProperties->LoggerNameOffset;
+                return IntPtr.Add(_session.DangerousGetHandle(), offset);
+            }
+        }
+    }
+
+    private unsafe Advapi32.EVENT_TRACE_PROPERTIES_V2* TraceProperties
+    {
+        get => (Advapi32.EVENT_TRACE_PROPERTIES_V2*)_session.DangerousGetHandle();
     }
 
     private EtwTraceSession(SafeEtwTraceSession session, string name)
@@ -93,46 +109,17 @@ public sealed class EtwTraceSession : IDisposable
     }
 
     internal EtwTrace OpenTrace()
-    {
-        nint sessionNamePtr = IntPtr.Zero;
-        unsafe
-        {
-            nint buffer = _session.DangerousGetHandle();
-            Advapi32.EVENT_TRACE_PROPERTIES_V2* props = (Advapi32.EVENT_TRACE_PROPERTIES_V2*)buffer;
-            sessionNamePtr = IntPtr.Add(buffer, props->LoggerNameOffset);
-        }
-
-        return new(sessionNamePtr, this);
-    }
+        => new(this);
 
     public void Dispose()
     {
-        _session?.Dispose();
+        Dispose(true);
         GC.SuppressFinalize(this);
     }
-}
 
-internal sealed class SafeEtwTraceSession : SafeHandle
-{
-    private long _sessionHandle = 0;
-
-    public SafeEtwTraceSession(long handle, nint buffer) : base(buffer, true)
+    internal void Dispose(bool disposing)
     {
-        _sessionHandle = handle;
+        _session?.Dispose();
     }
-
-    public override bool IsInvalid => _sessionHandle != 0 || handle != IntPtr.Zero;
-
-    internal long DangerousGetTraceHandle() => _sessionHandle;
-
-    protected override bool ReleaseHandle()
-    {
-        int res = 0;
-        if (handle != IntPtr.Zero)
-        {
-            Marshal.FreeHGlobal(handle);
-            handle = IntPtr.Zero;
-        }
-        return res == 0;
-    }
+    ~EtwTraceSession() => Dispose(false);
 }

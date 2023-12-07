@@ -75,6 +75,7 @@
         'New-PSEtwEventInfo'
         'Register-PSEtwEvent'
         'Remove-PSEtwSession'
+        'Stop-PSEtwTrace'
         'Test-PSEtwSession'
         'Trace-PSEtwEvent'
     )

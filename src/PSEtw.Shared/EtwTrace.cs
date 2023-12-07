@@ -1,6 +1,5 @@
 using PSEtw.Shared.Native;
 using System;
-using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Threading;
 
@@ -8,35 +7,41 @@ namespace PSEtw.Shared;
 
 public sealed class EtwTrace : IDisposable
 {
-    private Advapi32.EVENT_TRACE_LOGFILEW _logFile = new();
-    private long _handle = 0;
+    private static readonly Guid EVENT_TRACE_GUID = new("68fdd900-4a3e-11d1-84f4-0000f80464e3");
+
     private Thread? _processThread;
-    private Advapi32.PEVENT_RECORD_CALLBACK _delegate;
     private EtwTraceSession _session;
+    private SafeEtwTrace? _trace;
+
+    private Advapi32.PEVENT_RECORD_CALLBACK _delegate;
+    private nint _delegatePtr;
 
     public event EventHandler<EtwEventArgs>? EventReceived;
+    public event UnhandledExceptionEventHandler? UnhandledException;
 
-    internal EtwTrace(nint loggerName, EtwTraceSession session)
+    internal EtwTrace(EtwTraceSession session)
     {
-        _delegate = new(EventRecordCallback);
         _session = session;
 
-        _logFile.LoggerName = loggerName;
-        _logFile.ProcessTraceMode = ProcessTraceMode.PROCESS_TRACE_MODE_EVENT_RECORD | ProcessTraceMode.PROCESS_TRACE_MODE_REAL_TIME;
-        _logFile.EventRecordCallback = Marshal.GetFunctionPointerForDelegate(_delegate);
+        _delegate = new(EventRecordCallback);
+        _delegatePtr = Marshal.GetFunctionPointerForDelegate(_delegate);
     }
 
     internal void Start()
     {
-        _handle = Advapi32.OpenTraceW(ref _logFile);
-        long invalidHandle = Environment.Is64BitProcess ? -1 : 0xFFFFFFFF;
-        if (_handle == invalidHandle)
+        Advapi32.EVENT_TRACE_LOGFILEW logFile = new()
         {
-            _handle = 0;
-            throw new Win32Exception();
-        }
+            LoggerName = _session.SessionNamePtr,
+            ProcessTraceMode = ProcessTraceMode.PROCESS_TRACE_MODE_EVENT_RECORD |
+                ProcessTraceMode.PROCESS_TRACE_MODE_REAL_TIME,
+            EventRecordCallback = _delegatePtr,
+        };
 
-        _processThread = new Thread(() => ProcessTrace(_handle));
+        _trace = EtwApi.OpenTrace(logFile);
+        _processThread = new Thread(() =>
+        {
+            EtwApi.ProcessTrace(stackalloc[] { _trace.DangerousGetTraceHandle() });
+        });
         _processThread.Start();
     }
 
@@ -44,16 +49,26 @@ public sealed class EtwTrace : IDisposable
     {
         try
         {
-            EtwEventArgs eventArgs = new(record);
+            /*
+            While https://learn.microsoft.com/en-us/windows/win32/etw/retrieving-event-metadata
+            ignores records with this provider and a 0 Opcode I am seeing 3
+            events for this provider at the start of every trace. I cannot find
+            any documentation around this but am going to ignore them for now.
+            This will probably bite me in the future but lack of documentation
+            is killing me here.
+            */
+            if (record.EventHeader.ProviderId == EVENT_TRACE_GUID)
+            {
+                return;
+            }
+
+            EtwEventArgs eventArgs = EtwEventArgs.Create(ref record);
             EventReceived?.Invoke(this, eventArgs);
         }
-        catch (Win32Exception)
-        { }
-    }
-
-    private static void ProcessTrace(long handle)
-    {
-        EtwApi.ProcessTrace(stackalloc[] { handle });
+        catch (Exception e)
+        {
+            UnhandledException?.Invoke(this, new(e, false));
+        }
     }
 
     public void Dispose()
@@ -64,11 +79,8 @@ public sealed class EtwTrace : IDisposable
 
     internal void Dispose(bool disposing)
     {
-        if (_handle != 0)
-        {
-            Advapi32.CloseTrace(_handle);
-            _handle = 0;
-        }
+        _trace?.Dispose();
+
         if (disposing)
         {
             if (_processThread != null)

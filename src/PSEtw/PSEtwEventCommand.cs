@@ -3,9 +3,8 @@ using System;
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Linq;
 using System.Management.Automation;
-using System.Reflection;
+using System.Threading;
 
 namespace PSEtw;
 
@@ -191,15 +190,9 @@ public abstract class PSEtwEventBase : PSCmdlet, IDisposable
 }
 
 [Cmdlet(VerbsLifecycle.Register, "PSEtwEvent", DefaultParameterSetName = DEFAULT_PARAM_SET)]
-[OutputType(typeof(PSEventSubscriber))]
+[OutputType(typeof(PSEventJob))]
 public sealed class RegisterPSEtwEventCommand : PSEtwEventBase
 {
-    private const string TRACE_PROP_NAME = "EtwTrace";
-
-    private MethodInfo _disposeMeth = typeof(RegisterPSEtwEventCommand).GetMethod(
-        nameof(DisposeEventTrace),
-        BindingFlags.Public | BindingFlags.Static)!;
-
     [Parameter]
     public ScriptBlock? Action { get; set; }
 
@@ -218,32 +211,69 @@ public sealed class RegisterPSEtwEventCommand : PSEtwEventBase
     [Parameter]
     public SwitchParameter SupportEvent { get; set; }
 
+    protected override void BeginProcessing()
+    {
+        if (Forward && (Action != null))
+        {
+            string msg = "The action is not supported when you are forwarding events.";
+            ErrorRecord err = new(
+                new ArgumentException(msg),
+                "ActionAndForwardUsedTogether",
+                ErrorCategory.InvalidArgument,
+                null);
+            ThrowTerminatingError(err);
+            return;
+        }
+
+        base.BeginProcessing();
+    }
+
     protected override void StartTrace(EtwTrace trace)
     {
         PSEventSubscriber eventSub = Events.SubscribeEvent(
             trace,
-            "EventReceived",
+            nameof(EtwTrace.EventReceived),
             SourceIdentifier,
             MessageData,
             Action,
             SupportEvent,
             Forward,
             MaxTriggerCount);
-
-        PSObject eventSubObj = PSObject.AsPSObject(eventSub);
-        eventSubObj.Properties.Add(new PSNoteProperty(TRACE_PROP_NAME, trace));
-        eventSubObj.Methods.Add(new PSCodeMethod("Dispose", _disposeMeth));
+        eventSub.Unsubscribed += static (s, e) =>
+        {
+            (s as EtwTrace)?.Dispose();
+        };
 
         trace.Start();
-        WriteObject(eventSubObj);
-    }
 
-    public static void DisposeEventTrace(PSObject obj)
+        if ((Action != null) && (!SupportEvent))
+        {
+            WriteObject(eventSub.Action);
+        }
+    }
+}
+
+[Cmdlet(VerbsLifecycle.Stop, "PSEtwTrace")]
+public sealed class StopPSEtwTraceCommand : PSCmdlet
+{
+    [Parameter(
+        Mandatory = true,
+        Position = 0,
+        ValueFromPipeline = true
+    )]
+    public EtwEventArgs? InputObject { get; set; }
+
+    protected override void EndProcessing()
     {
-        PSPropertyInfo? etwTraceProp = obj.Properties.Match(
-            TRACE_PROP_NAME,
-            PSMemberTypes.NoteProperty).FirstOrDefault();
-        ((EtwTrace?)etwTraceProp?.Value)?.Dispose();
+        Debug.Assert(InputObject != null);
+        try
+        {
+            InputObject!.CancelToken?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            WriteVerbose("Trace has already been stopped");
+        }
     }
 }
 
@@ -251,27 +281,76 @@ public sealed class RegisterPSEtwEventCommand : PSEtwEventBase
 [OutputType(typeof(EtwEventArgs))]
 public sealed class TracePSEtwEventCommand : PSEtwEventBase
 {
-    private BlockingCollection<EtwEventArgs> _events = new();
+    private sealed class ExceptionOrEvent
+    {
+        public Exception? Exception { get; }
+        public EtwEventArgs? Args { get; }
+
+        public ExceptionOrEvent(Exception exception)
+        {
+            Exception = exception;
+        }
+
+        public ExceptionOrEvent(EtwEventArgs args)
+        {
+            Args = args;
+        }
+    }
+    private BlockingCollection<ExceptionOrEvent> _events = new();
 
     protected override void StartTrace(EtwTrace trace)
     {
         using (trace)
+        using (CancellationTokenSource cancelSource = new())
         {
             trace.EventReceived += EventReceived;
+            trace.UnhandledException += UnhandledExceptionReceived;
             trace.Start();
 
-            foreach (EtwEventArgs args in _events.GetConsumingEnumerable())
+            foreach (ExceptionOrEvent obj in _events.GetConsumingEnumerable())
             {
-                WriteObject(args);
+                if (obj.Args != null)
+                {
+                    obj.Args.CancelToken = cancelSource;
+                    WriteObject(obj.Args);
+                }
+                else
+                {
+                    Debug.Assert(obj.Exception != null);
+                    Exception exp = obj.Exception!;
+
+                    string msg = $"Unhandled exception in trace callback: {exp.Message}";
+                    ErrorRecord err = new(
+                        exp,
+                        "TraceCallbackException",
+                        ErrorCategory.NotEnabled,
+                        null
+                    )
+                    {
+                        ErrorDetails = new(msg)
+                    };
+                    WriteError(err);
+                }
+
+                if (cancelSource.IsCancellationRequested)
+                {
+                    break;
+                }
             }
         }
     }
 
     private void EventReceived(object? sender, EtwEventArgs args)
+        => AddToCollection(new(args));
+
+    private void UnhandledExceptionReceived(object? sender, UnhandledExceptionEventArgs args)
+        => AddToCollection(new((Exception)args.ExceptionObject));
+
+    private void AddToCollection(ExceptionOrEvent obj)
     {
         if (!_events.IsAddingCompleted)
         {
-            _events.Add(args);
+            _events.Add(obj);
         }
     }
 
