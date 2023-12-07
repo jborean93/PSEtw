@@ -6,7 +6,7 @@ if ($IsCoreClr) {
     if (-not ('PSEtw.Shared.LoadContext' -as [type])) {
         $isReload = $false
 
-        Add-Type -Path ([System.IO.Path]::Combine($PSScriptRoot, 'bin', 'net6.0', "$moduleName.Shared.dll"))
+        Add-Type -Path ([System.IO.Path]::Combine($PSScriptRoot, 'bin', 'net6.0-windows', "$moduleName.Shared.dll"))
     }
 
     $mainModule = [PSEtw.Shared.LoadContext]::Initialize()

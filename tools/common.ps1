@@ -139,8 +139,14 @@ class Manifest {
         )
 
         foreach ($framework in $availableFrameworks) {
-            if ($framework -in $this.TargetFrameworks) {
-                $this.TestFramework = $framework
+            foreach ($actualFramework in $this.TargetFrameworks) {
+                if ($actualFramework.StartsWith($framework)) {
+                    $this.TestFramework = $framework
+                    break
+                }
+            }
+
+            if ($this.TestFramework) {
                 break
             }
         }
