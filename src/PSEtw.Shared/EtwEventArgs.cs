@@ -330,20 +330,24 @@ public sealed class EventPropertyInfo
             }
             else
             {
-                // TdhTypeReader transformer = TdhTypeReader.Create(
-                //     name,
-                //     headerFlags,
-                //     inType);
+                object outValue = TdhTypeReader.Transform(
+                    name,
+                    headerFlags,
+                    userData,
+                    propLength,
+                    inType,
+                    outType,
+                    out int valueConsumed,
+                    out short? storeInteger);
 
-                // object outValue = transformer.GetValue(userData, outType, out int valueConsumed);
-                // if (transformer.StoreInteger != null && !isArray)
-                // {
-                //     integerValues[index] = (short)transformer.StoreInteger;
-                // }
+                if (storeInteger != null && !isArray)
+                {
+                    integerValues[index] = (short)storeInteger;
+                }
 
-                // userData = userData.Slice(valueConsumed);
-                // consumed += valueConsumed;
-                // values.Add(outValue);
+                userData = userData.Slice(valueConsumed);
+                consumed += valueConsumed;
+                values.Add(outValue);
             }
         }
 

@@ -1,200 +1,459 @@
 using PSEtw.Shared.Native;
 using System;
 using System.Buffers.Binary;
-using System.Diagnostics;
 using System.Globalization;
-using System.Management.Automation;
+using System.Net;
 using System.Runtime.InteropServices;
-using System.Security.Principal;
 using System.Text;
 
 namespace PSEtw.Shared;
 
-internal abstract class TdhTypeReader
+internal class TdhTypeReader
 {
-    public short? StoreInteger { get; protected set; } = null;
+    protected short? StoreInteger { get; set; } = null;
 
-    internal abstract TdhTypeTransformer GetDefaultTransformer();
-    internal abstract ReadOnlySpan<byte> GetBytes(ReadOnlySpan<byte> data, int length);
+    protected virtual ReadOnlySpan<byte> GetBytes(ReadOnlySpan<byte> data, int length)
+        => data.Slice(0, length);
 
-    public static TdhTypeReader Create(
+    public static object Transform(
+        string? propertyName,
+        HeaderFlags headerFlags,
+        ReadOnlySpan<byte> data,
+        short length,
+        TdhInType inType,
+        TdhOutType outType,
+        out int consumed,
+        out short? storeInteger)
+    {
+        (TdhTypeReader reader, TdhOutType defaultOutType) = GetReader(
+            propertyName, headerFlags, inType);
+        if (outType == TdhOutType.TDH_OUTTYPE_NULL)
+        {
+            outType = defaultOutType;
+        }
+
+        ValueTransformer transformer = GetTransformer(propertyName, outType);
+        object? value = transformer(reader, data, length, out consumed);
+        if (value == null)
+        {
+            string msg =
+                $"No valid transformations of {reader.GetType().Name} to " +
+                $"{transformer.GetType().Name} for '{propertyName}'";
+            throw new NotImplementedException(msg);
+        }
+
+        storeInteger = reader.StoreInteger;
+
+        return value;
+    }
+
+    private static (TdhTypeReader, TdhOutType) GetReader(
         string? propertyName,
         HeaderFlags headerFlags,
         TdhInType inType
     ) => inType switch
     {
-        TdhInType.TDH_INTYPE_UNICODESTRING => new TdhStringReader(Encoding.Unicode),
-        TdhInType.TDH_INTYPE_ANSISTRING => new TdhStringReader(TdhStringReader.ANSIEncoding),
-        TdhInType.TDH_INTYPE_INT8 => new TdhIntegerReader<TdhByteTransformer>(1),
-        TdhInType.TDH_INTYPE_UINT8 => new TdhIntegerReader<TdhUnsignedByteTransformer>(1),
-        TdhInType.TDH_INTYPE_INT16 => new TdhIntegerReader<TdhShortTransformer>(2),
-        TdhInType.TDH_INTYPE_UINT16 => new TdhIntegerReader<TdhUnsignedShortTransformer>(2),
-        TdhInType.TDH_INTYPE_INT32 => new TdhIntegerReader<TdhIntTransformer>(4),
-        TdhInType.TDH_INTYPE_UINT32 => new TdhIntegerReader<TdhUnsignedIntTransformer>(4),
-        TdhInType.TDH_INTYPE_INT64 => new TdhIntegerReader<TdhLongTransformer>(8),
-        TdhInType.TDH_INTYPE_UINT64 => new TdhIntegerReader<TdhUnsignedLongTransformer>(8),
-        // TdhInType.TDH_INTYPE_FLOAT => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_DOUBLE => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_BOOLEAN => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_BINARY => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_GUID => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_POINTER => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_FILETIME => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_SYSTEMTIME => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_SID => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_HEXINT32 => new TdhIntegerReader<TdhByteTransformer>(4),
-        // TdhInType.TDH_INTYPE_HEXINT64 => new TdhIntegerReader<TdhByteTransformer>(8),
-        // TdhInType.TDH_INTYPE_MANIFEST_COUNTEDSTRING => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_MANIFEST_COUNTEDANSISTRING => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_MANIFEST_COUNTEDBINARY => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_COUNTEDSTRING => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_COUNTEDANSISTRING => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_REVERSEDCOUNTEDSTRING => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_REVERSEDCOUNTEDANSISTRING => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_NONNULLTERMINATEDSTRING => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_NONNULLTERMINATEDANSISTRING => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_UNICODECHAR => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_ANSICHAR => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_SIZET => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_HEXDUMP => new TdhIntType(propertyName),
-        // TdhInType.TDH_INTYPE_WBEMSID => new TdhIntType(propertyName),
+        TdhInType.TDH_INTYPE_UNICODESTRING => (new TdhStringReader(Encoding.Unicode), TdhOutType.TDH_OUTTYPE_STRING),
+        TdhInType.TDH_INTYPE_ANSISTRING => (
+            new TdhStringReader(TdhStringReader.ANSIEncoding), TdhOutType.TDH_OUTTYPE_STRING
+        ),
+        TdhInType.TDH_INTYPE_INT8 => (new TdhIntegerReader(1), TdhOutType.TDH_OUTTYPE_BYTE),
+        TdhInType.TDH_INTYPE_UINT8 => (new TdhIntegerReader(1), TdhOutType.TDH_OUTTYPE_UNSIGNEDBYTE),
+        TdhInType.TDH_INTYPE_INT16 => (new TdhIntegerReader(2), TdhOutType.TDH_OUTTYPE_SHORT),
+        TdhInType.TDH_INTYPE_UINT16 => (new TdhIntegerReader(2), TdhOutType.TDH_OUTTYPE_UNSIGNEDSHORT),
+        TdhInType.TDH_INTYPE_INT32 => (new TdhIntegerReader(4), TdhOutType.TDH_OUTTYPE_INT),
+        TdhInType.TDH_INTYPE_UINT32 => (new TdhIntegerReader(4), TdhOutType.TDH_OUTTYPE_UNSIGNEDINT),
+        TdhInType.TDH_INTYPE_INT64 => (new TdhIntegerReader(8), TdhOutType.TDH_OUTTYPE_LONG),
+        TdhInType.TDH_INTYPE_UINT64 => (new TdhIntegerReader(8), TdhOutType.TDH_OUTTYPE_UNSIGNEDLONG),
+        TdhInType.TDH_INTYPE_FLOAT => (new TdhIntegerReader(4), TdhOutType.TDH_OUTTYPE_FLOAT),
+        TdhInType.TDH_INTYPE_DOUBLE => (new TdhIntegerReader(8), TdhOutType.TDH_OUTTYPE_DOUBLE),
+        TdhInType.TDH_INTYPE_BOOLEAN => (new TdhIntegerReader(4), TdhOutType.TDH_OUTTYPE_BOOLEAN),
+        TdhInType.TDH_INTYPE_BINARY => (new TdhTypeReader(), TdhOutType.TDH_OUTTYPE_HEXBINARY),
+        TdhInType.TDH_INTYPE_GUID => (new TdhIntegerReader(16), TdhOutType.TDH_OUTTYPE_GUID),
+        TdhInType.TDH_INTYPE_POINTER => (
+            new TdhIntegerReader(GetPointerSize(headerFlags)), TdhOutType.TDH_OUTTYPE_HEXINT64
+        ),
+        TdhInType.TDH_INTYPE_FILETIME => (new TdhIntegerReader(8), TdhOutType.TDH_OUTTYPE_DATETIME),
+        TdhInType.TDH_INTYPE_SYSTEMTIME => (new TdhIntegerReader(16), TdhOutType.TDH_OUTTYPE_DATETIME),
+        // TdhInType.TDH_INTYPE_SID => (new TdhIntType(propertyName), TdhOutType.TDH_OUTTYPE_STRING),
+        TdhInType.TDH_INTYPE_HEXINT32 => (new TdhIntegerReader(4), TdhOutType.TDH_OUTTYPE_HEXINT32),
+        TdhInType.TDH_INTYPE_HEXINT64 => (new TdhIntegerReader(8), TdhOutType.TDH_OUTTYPE_HEXINT64),
+        TdhInType.TDH_INTYPE_MANIFEST_COUNTEDSTRING => (
+            new TdhBinaryLengthReader(true), TdhOutType.TDH_OUTTYPE_STRING
+        ),
+        TdhInType.TDH_INTYPE_MANIFEST_COUNTEDANSISTRING => (
+            new TdhBinaryLengthReader(true), TdhOutType.TDH_OUTTYPE_STRING
+        ),
+        TdhInType.TDH_INTYPE_MANIFEST_COUNTEDBINARY => (
+            new TdhBinaryLengthReader(true), TdhOutType.TDH_OUTTYPE_HEXBINARY
+        ),
+        TdhInType.TDH_INTYPE_COUNTEDSTRING => (new TdhBinaryLengthReader(true), TdhOutType.TDH_OUTTYPE_STRING),
+        TdhInType.TDH_INTYPE_COUNTEDANSISTRING => (new TdhBinaryLengthReader(true), TdhOutType.TDH_OUTTYPE_STRING),
+        TdhInType.TDH_INTYPE_REVERSEDCOUNTEDSTRING => (new TdhBinaryLengthReader(false), TdhOutType.TDH_OUTTYPE_STRING),
+        TdhInType.TDH_INTYPE_REVERSEDCOUNTEDANSISTRING => (
+            new TdhBinaryLengthReader(false), TdhOutType.TDH_OUTTYPE_STRING
+        ),
+        TdhInType.TDH_INTYPE_NONNULLTERMINATEDSTRING => (
+            new TdhStringReader(Encoding.Unicode), TdhOutType.TDH_OUTTYPE_STRING
+        ),
+        TdhInType.TDH_INTYPE_NONNULLTERMINATEDANSISTRING => (
+            new TdhStringReader(TdhStringReader.ANSIEncoding), TdhOutType.TDH_OUTTYPE_STRING
+        ),
+        TdhInType.TDH_INTYPE_UNICODECHAR => (new TdhIntegerReader(2), TdhOutType.TDH_OUTTYPE_STRING),
+        TdhInType.TDH_INTYPE_ANSICHAR => (new TdhIntegerReader(1), TdhOutType.TDH_OUTTYPE_STRING),
+        TdhInType.TDH_INTYPE_SIZET => (
+            new TdhIntegerReader(GetPointerSize(headerFlags)), TdhOutType.TDH_OUTTYPE_HEXINT64
+        ),
+        TdhInType.TDH_INTYPE_HEXDUMP => (
+            new TdhBinaryLengthReader(true, lengthIsShort: false), TdhOutType.TDH_OUTTYPE_HEXBINARY
+        ),
+        // TdhInType.TDH_INTYPE_WBEMSID => (new TdhIntType(propertyName), TdhOutType.TDH_OUTTYPE_STRING),
         _ => throw new NotImplementedException($"Property '{propertyName}' has unknown input type, cannot unpack"),
     };
 
-    // private static object GetDataOutValue(
-    //     string name,
-    //     HeaderFlags headerFlags,
-    //     ReadOnlySpan<byte> data,
-    //     short length,
-    //     TdhInType inType,
-    //     TdhOutType outType,
-    //     Span<short> integerValue,
-    //     int index,
-    //     out int consumed)
-    // {
-    //     consumed = 0;
-    //     TdhOutType defaultOutType;
-    //     object? value = null;
-    //     switch (inType)
-    //     {
-    //         case TdhInType.TDH_INTYPE_INT8:
-    //         case TdhInType.TDH_INTYPE_UINT8:
-    //         case TdhInType.TDH_INTYPE_ANSICHAR:
-    //             defaultOutType = inType switch
-    //             {
-    //                 TdhInType.TDH_INTYPE_INT8 => TdhOutType.TDH_OUTTYPE_BYTE,
-    //                 TdhInType.TDH_INTYPE_UINT8 => TdhOutType.TDH_OUTTYPE_UNSIGNEDBYTE,
-    //                 TdhInType.TDH_INTYPE_ANSICHAR => TdhOutType.TDH_OUTTYPE_STRING,
-    //             };
-    //             consumed = 1;
-    //             break;
+    private static ValueTransformer GetTransformer(
+        string? propertyName,
+        TdhOutType outType
+    ) => outType switch
+    {
+        TdhOutType.TDH_OUTTYPE_STRING => ValueTransformerString,
+        TdhOutType.TDH_OUTTYPE_DATETIME => ValueTransformerDateTimeUnspecified,
+        TdhOutType.TDH_OUTTYPE_BYTE => ValueTransformerSignedByte,
+        TdhOutType.TDH_OUTTYPE_UNSIGNEDBYTE => ValueTransformerByte,
+        TdhOutType.TDH_OUTTYPE_SHORT => ValueTransformerShort,
+        TdhOutType.TDH_OUTTYPE_UNSIGNEDSHORT => ValueTransformerUnsignedShort,
+        TdhOutType.TDH_OUTTYPE_INT => ValueTransformerInt,
+        TdhOutType.TDH_OUTTYPE_UNSIGNEDINT => ValueTransformerUnsignedInt,
+        TdhOutType.TDH_OUTTYPE_LONG => ValueTransformerLong,
+        TdhOutType.TDH_OUTTYPE_UNSIGNEDLONG => ValueTransformerUnsignedLong,
+        TdhOutType.TDH_OUTTYPE_FLOAT => ValueTransformerFloat,
+        TdhOutType.TDH_OUTTYPE_DOUBLE => ValueTransformerDouble,
+        TdhOutType.TDH_OUTTYPE_BOOLEAN => ValueTransformerBoolean,
+        TdhOutType.TDH_OUTTYPE_GUID => ValueTransformerGuid,
+        TdhOutType.TDH_OUTTYPE_HEXBINARY => ValueTransformerByteArray,
+        TdhOutType.TDH_OUTTYPE_HEXINT8 => ValueTransformerByte,
+        TdhOutType.TDH_OUTTYPE_HEXINT16 => ValueTransformerShort,
+        TdhOutType.TDH_OUTTYPE_HEXINT32 => ValueTransformerInt,
+        TdhOutType.TDH_OUTTYPE_HEXINT64 => ValueTransformerLong,
+        TdhOutType.TDH_OUTTYPE_PID => ValueTransformerInt,
+        TdhOutType.TDH_OUTTYPE_TID => ValueTransformerInt,
+        TdhOutType.TDH_OUTTYPE_PORT => ValueTransformerPort,
+        TdhOutType.TDH_OUTTYPE_IPV4 => ValueTransformerIPAddress,
+        TdhOutType.TDH_OUTTYPE_IPV6 => ValueTransformerIPAddress,
+        // TdhOutType.TDH_OUTTYPE_SOCKETADDRESS => ValueTransformer,
+        // TdhOutType.TDH_OUTTYPE_CIMDATETIME => ValueTransformer,
+        // TdhOutType.TDH_OUTTYPE_ETWTIME => ValueTransformer,
+        // TdhOutType.TDH_OUTTYPE_XML => ValueTransformer,
+        TdhOutType.TDH_OUTTYPE_ERRORCODE => ValueTransformerInt,
+        TdhOutType.TDH_OUTTYPE_WIN32ERROR => ValueTransformerInt,
+        TdhOutType.TDH_OUTTYPE_NTSTATUS => ValueTransformerInt,
+        TdhOutType.TDH_OUTTYPE_HRESULT => ValueTransformerInt,
+        TdhOutType.TDH_OUTTYPE_CULTURE_INSENSITIVE_DATETIME => ValueTransformerDateTimeUnspecified,
+        TdhOutType.TDH_OUTTYPE_JSON => ValueTransformerString,
+        TdhOutType.TDH_OUTTYPE_UTF8 => ValueTransformerUtf8String,
+        TdhOutType.TDH_OUTTYPE_PKCS7_WITH_TYPE_INFO => ValueTransformerByteArray,
+        TdhOutType.TDH_OUTTYPE_CODE_POINTER => ValueTransformerLong,
+        TdhOutType.TDH_OUTTYPE_DATETIME_UTC => ValueTransformerDateTimeUtc,
+        // TdhOutType.TDH_OUTTYPE_REDUCEDSTRING => ValueTransformer,
+        // TdhOutType.TDH_OUTTYPE_NOPRINT => ValueTransformer,
+        _ => throw new NotImplementedException($"Property '{propertyName}' has unknown output type, cannot unpack"),
+    };
 
-    //         case TdhInType.TDH_INTYPE_INT16:
-    //         case TdhInType.TDH_INTYPE_UINT16:
-    //         case TdhInType.TDH_INTYPE_UNICODECHAR:
-    //             consumed = 2;
-    //             break;
+    private static int GetPointerSize(HeaderFlags flags)
+    {
+        if (flags.HasFlag(HeaderFlags.EVENT_HEADER_FLAG_32_BIT_HEADER))
+        {
+            return 4;
+        }
+        else if (flags.HasFlag(HeaderFlags.EVENT_HEADER_FLAG_64_BIT_HEADER))
+        {
+            return 8;
+        }
+        else
+        {
+            return IntPtr.Size;
+        }
+    }
+    protected delegate object? ValueTransformer(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        out int consumed);
 
-    //         case TdhInType.TDH_INTYPE_INT32:
-    //         case TdhInType.TDH_INTYPE_UINT32:
-    //         case TdhInType.TDH_INTYPE_FLOAT:
-    //         case TdhInType.TDH_INTYPE_BOOLEAN:
-    //         case TdhInType.TDH_INTYPE_HEXINT32:
-    //             consumed = 4;
-    //             break;
+    private static object? ValueTransformerString(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        out int consumed)
+    {
+        if (reader is ITdhStringReader stringReader)
+        {
+            return stringReader.GetString(data, length, null, out consumed);
+        }
 
-    //         case TdhInType.TDH_INTYPE_INT64:
-    //         case TdhInType.TDH_INTYPE_UINT64:
-    //         case TdhInType.TDH_INTYPE_DOUBLE:
-    //         case TdhInType.TDH_INTYPE_FILETIME:
-    //         case TdhInType.TDH_INTYPE_HEXINT64:
-    //             consumed = 8;
-    //             break;
+        consumed = 0;
+        return null;
+    }
 
-    //         case TdhInType.TDH_INTYPE_GUID:
-    //         case TdhInType.TDH_INTYPE_SYSTEMTIME:
-    //             consumed = 16;
-    //             break;
+    private static object? ValueTransformerUtf8String(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        out int consumed)
+    {
+        if (reader is ITdhStringReader stringReader)
+        {
+            return stringReader.GetString(data, length, Encoding.UTF8, out consumed);
+        }
 
-    //         case TdhInType.TDH_INTYPE_BINARY:
-    //             consumed = length;
-    //             break;
+        consumed = 0;
+        return null;
+    }
 
-    //         case TdhInType.TDH_INTYPE_POINTER:
-    //         case TdhInType.TDH_INTYPE_SIZET:
-    //             consumed = headerFlags switch
-    //             {
-    //                 HeaderFlags.EVENT_HEADER_FLAG_32_BIT_HEADER => 4,
-    //                 HeaderFlags.EVENT_HEADER_FLAG_64_BIT_HEADER => 8,
-    //                 _ => IntPtr.Size,
-    //             };
-    //             break;
+    private static ReadOnlySpan<byte> GetBytes(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        out int consumed)
+    {
+        ReadOnlySpan<byte> raw = reader.GetBytes(data, length);
+        consumed = raw.Length;
 
-    //         case TdhInType.TDH_INTYPE_MANIFEST_COUNTEDSTRING:
-    //         case TdhInType.TDH_INTYPE_MANIFEST_COUNTEDANSISTRING:
-    //         case TdhInType.TDH_INTYPE_MANIFEST_COUNTEDBINARY:
-    //         case TdhInType.TDH_INTYPE_COUNTEDSTRING:
-    //         case TdhInType.TDH_INTYPE_COUNTEDANSISTRING:
-    //             consumed = BinaryPrimitives.ReadInt16LittleEndian(data);
-    //             break;
+        return raw;
+    }
 
-    //         case TdhInType.TDH_INTYPE_REVERSEDCOUNTEDSTRING:
-    //         case TdhInType.TDH_INTYPE_REVERSEDCOUNTEDANSISTRING:
-    //             consumed = BinaryPrimitives.ReadInt16BigEndian(data);
-    //             break;
+    private static object? ValueTransformerDateTime(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        DateTimeKind kind,
+        out int consumed)
+    {
+        ReadOnlySpan<byte> raw = GetBytes(reader, data, length, out consumed);
+        if (raw.Length == 8)
+        {
+            long ft = BinaryPrimitives.ReadInt64LittleEndian(raw);
+            return DateTime.SpecifyKind(DateTime.FromFileTime(ft), kind);
+        }
+        else if (raw.Length == Marshal.SizeOf<SYSTEMTIME>())
+        {
+            unsafe
+            {
+                ReadOnlySpan<SYSTEMTIME> st = MemoryMarshal.Cast<byte, SYSTEMTIME>(raw);
 
-    //         case TdhInType.TDH_INTYPE_HEXDUMP:
-    //             consumed = BinaryPrimitives.ReadInt32LittleEndian(data);
-    //             break;
+                return new DateTime(
+                    st[0].wYear,
+                    st[0].wMonth,
+                    st[0].wDay,
+                    st[0].wHour,
+                    st[0].wMinute,
+                    st[0].wSecond,
+                    st[0].wMilliseconds,
+                    kind);
+            }
 
-    //         case TdhInType.TDH_INTYPE_UNICODESTRING:
-    //         case TdhInType.TDH_INTYPE_NONNULLTERMINATEDSTRING:
-    //             string uniValue = "";
-    //             consumed = uniValue.Length * 2;  // Also add NULL char
-    //             value = uniValue;
-    //             break;
+        }
 
+        return null;
+    }
 
-    //         case TdhInType.TDH_INTYPE_ANSISTRING:
-    //         case TdhInType.TDH_INTYPE_NONNULLTERMINATEDANSISTRING:
-    //             string ansiValue = "";
-    //             consumed = ansiValue.Length;  // Also add NULL char
-    //             value = ansiValue;
-    //             break;
+    private static object? ValueTransformerDateTimeUnspecified(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        out int consumed
+    ) => ValueTransformerDateTime(reader, data, length, DateTimeKind.Unspecified, out consumed);
 
-    //         case TdhInType.TDH_INTYPE_SID:
-    //         case TdhInType.TDH_INTYPE_WBEMSID:
-    //             SecurityIdentifier sid;
-    //             unsafe
-    //             {
-    //                 fixed (byte* bytePtr = data)
-    //                 {
-    //                     sid = new((nint)bytePtr);
-    //                 }
-    //             }
-    //             consumed = sid.BinaryLength;
-    //             value = sid;
-    //             break;
+    private static object? ValueTransformerDateTimeUtc(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        out int consumed
+    ) => ValueTransformerDateTime(reader, data, length, DateTimeKind.Utc, out consumed);
 
-    //         default:
-    //             throw new NotImplementedException(
-    //                 $"Event Property '{name}' has TDH_INTYPE {inType} that is not implemented");
-    //     }
+    private static object? ValueTransformerByte(
+            TdhTypeReader reader,
+            ReadOnlySpan<byte> data,
+            short length,
+            out int consumed)
+    {
+        return GetBytes(reader, data, length, out consumed)[0];
+    }
 
-    //     // If the in type actually parsed the bytes into an object we can
-    //     // return that here.
-    //     if (value != null)
-    //     {
-    //         return value;
-    //     }
+    private static object? ValueTransformerSignedByte(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        out int consumed)
+    {
+        return unchecked((sbyte)GetBytes(reader, data, length, out consumed)[0]);
+    }
 
-    //     return 0;
-    // }
+    private static object? ValueTransformerShort(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        out int consumed)
+    {
+        return BinaryPrimitives.ReadInt16LittleEndian(
+            GetBytes(reader, data, length, out consumed));
+    }
+
+    private static object? ValueTransformerUnsignedShort(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        out int consumed)
+    {
+        return BinaryPrimitives.ReadUInt16LittleEndian(
+            GetBytes(reader, data, length, out consumed));
+    }
+
+    private static object? ValueTransformerInt(
+         TdhTypeReader reader,
+         ReadOnlySpan<byte> data,
+         short length,
+         out int consumed)
+    {
+        return BinaryPrimitives.ReadInt32LittleEndian(
+            GetBytes(reader, data, length, out consumed));
+    }
+
+    private static object? ValueTransformerUnsignedInt(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        out int consumed)
+    {
+        return BinaryPrimitives.ReadUInt32LittleEndian(
+            GetBytes(reader, data, length, out consumed));
+    }
+
+    private static object? ValueTransformerLong(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        out int consumed)
+    {
+        return BinaryPrimitives.ReadInt64LittleEndian(
+            GetBytes(reader, data, length, out consumed));
+    }
+
+    private static object? ValueTransformerUnsignedLong(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        out int consumed)
+    {
+        return BinaryPrimitives.ReadUInt64LittleEndian(
+            GetBytes(reader, data, length, out consumed));
+    }
+
+    private static object? ValueTransformerFloat(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        out int consumed)
+    {
+        ReadOnlySpan<byte> raw = GetBytes(reader, data, length, out consumed);
+#if NET6_0_OR_GREATER
+        return BinaryPrimitives.ReadSingleLittleEndian(raw);
+#else
+        return BitConverter.ToSingle(raw.ToArray(), 0);
+#endif
+    }
+
+    private static object? ValueTransformerDouble(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        out int consumed)
+    {
+        ReadOnlySpan<byte> raw = GetBytes(reader, data, length, out consumed);
+#if NET6_0_OR_GREATER
+        return BinaryPrimitives.ReadDoubleLittleEndian(raw);
+#else
+        return BitConverter.ToDouble(raw.ToArray(), 0);
+#endif
+    }
+
+    private static object? ValueTransformerBoolean(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        out int consumed)
+    {
+        foreach (byte b in GetBytes(reader, data, length, out consumed))
+        {
+            if (b != 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static object? ValueTransformerGuid(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        out int consumed)
+    {
+        ReadOnlySpan<byte> raw = GetBytes(reader, data, length, out consumed);
+
+#if NET6_0_OR_GREATER
+        return new Guid(raw);
+#else
+        return new Guid(raw.ToArray());
+#endif
+    }
+
+    private static object? ValueTransformerByteArray(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        out int consumed)
+    {
+        return GetBytes(reader, data, length, out consumed).ToArray();
+    }
+
+    private static object? ValueTransformerPort(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        out int consumed)
+    {
+        ushort value = BinaryPrimitives.ReadUInt16BigEndian(
+            GetBytes(reader, data, length, out consumed));
+
+        return (int)value;
+    }
+
+    private static object? ValueTransformerIPAddress(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length,
+        out int consumed)
+    {
+        ReadOnlySpan<byte> raw = GetBytes(reader, data, length, out consumed);
+
+#if NET6_0_OR_GREATER
+        return new IPAddress(raw);
+#else
+        return new IPAddress(raw.ToArray());
+#endif
+    }
 }
+
 
 internal interface ITdhStringReader
 {
-    public string GetString(ReadOnlySpan<byte> data, int length, out int consumed);
+    public string GetString(
+        ReadOnlySpan<byte> data,
+        int length,
+        Encoding? encoding,
+        out int consumed);
 }
 
 internal class TdhStringReader : TdhTypeReader, ITdhStringReader
@@ -210,9 +469,7 @@ internal class TdhStringReader : TdhTypeReader, ITdhStringReader
         _encoding = encoding;
     }
 
-    internal override TdhTypeTransformer GetDefaultTransformer() => new TdhStringTransformer();
-
-    internal override ReadOnlySpan<byte> GetBytes(ReadOnlySpan<byte> data, int length)
+    protected override ReadOnlySpan<byte> GetBytes(ReadOnlySpan<byte> data, int length)
     {
         if (length > 0)
         {
@@ -236,7 +493,7 @@ internal class TdhStringReader : TdhTypeReader, ITdhStringReader
         }
     }
 
-    public string GetString(ReadOnlySpan<byte> data, int length, out int consumed)
+    public string GetString(ReadOnlySpan<byte> data, int length, Encoding? encoding, out int consumed)
     {
         ReadOnlySpan<byte> actualData = GetBytes(data, length);
         consumed = actualData.Length;
@@ -244,12 +501,13 @@ internal class TdhStringReader : TdhTypeReader, ITdhStringReader
         // If no length was specified the data will include the null terminator
         // which we don't want in the final string.
         // FIXME: Check that end is the null char first.
+        // FIXME: Length might be problematic with UTF8 string
         if (length == 0 && actualData.Length < data.Length)
         {
             actualData = actualData.Slice(0, actualData.Length - _charSize);
         }
 
-        return SpanToString(actualData, _encoding);
+        return SpanToString(actualData, encoding ?? _encoding);
     }
 
     internal static string SpanToString(ReadOnlySpan<byte> data, Encoding encoding)
@@ -269,8 +527,7 @@ internal class TdhStringReader : TdhTypeReader, ITdhStringReader
     }
 }
 
-internal class TdhIntegerReader<T> : TdhTypeReader, ITdhStringReader
-    where T : TdhTypeTransformer, new()
+internal class TdhIntegerReader : TdhTypeReader, ITdhStringReader
 {
     private int _size;
 
@@ -279,9 +536,7 @@ internal class TdhIntegerReader<T> : TdhTypeReader, ITdhStringReader
         _size = size;
     }
 
-    internal override TdhTypeTransformer GetDefaultTransformer() => new T();
-
-    internal override ReadOnlySpan<byte> GetBytes(ReadOnlySpan<byte> data, int length)
+    protected override ReadOnlySpan<byte> GetBytes(ReadOnlySpan<byte> data, int length)
     {
         ReadOnlySpan<byte> actualData = data.Slice(0, _size);
         switch (_size)
@@ -303,12 +558,11 @@ internal class TdhIntegerReader<T> : TdhTypeReader, ITdhStringReader
         return actualData;
     }
 
-    public string GetString(ReadOnlySpan<byte> data, int length, out int consumed)
+    public string GetString(ReadOnlySpan<byte> data, int length, Encoding? encoding, out int consumed)
     {
         ReadOnlySpan<byte> actualData = GetBytes(data, length);
         consumed = actualData.Length;
 
-        Encoding encoding;
         if (actualData.Length == 1)
         {
             encoding = TdhStringReader.ANSIEncoding;
@@ -327,215 +581,44 @@ internal class TdhIntegerReader<T> : TdhTypeReader, ITdhStringReader
     }
 }
 
-internal abstract class TdhTypeTransformer
+internal class TdhBinaryLengthReader : TdhTypeReader, ITdhStringReader
 {
-    public static object Transform(
-        string propertyName,
-        ReadOnlySpan<byte> data,
-        short length,
-        TdhTypeReader typeReader,
-        TdhOutType outType,
-        out int consumed,
-        out short? storeInteger)
+    private bool _littleEndian;
+    private bool _lengthIsShort;
+
+    internal TdhBinaryLengthReader(bool littleEndian, bool lengthIsShort = true)
     {
-        TdhTypeTransformer transformer;
-        if (outType == TdhOutType.TDH_OUTTYPE_NULL)
+        _littleEndian = littleEndian;
+        _lengthIsShort = lengthIsShort;
+    }
+
+    protected override ReadOnlySpan<byte> GetBytes(ReadOnlySpan<byte> data, int length)
+    {
+        int size = 2;
+        if (_lengthIsShort)
         {
-            transformer = typeReader.GetDefaultTransformer();
+            size = 4;
+            length = BinaryPrimitives.ReadInt32BigEndian(data);
+        }
+        else if (_littleEndian)
+        {
+            length = BinaryPrimitives.ReadUInt16LittleEndian(data);
         }
         else
         {
-            transformer = GetTransformer(propertyName, outType);
+            length = BinaryPrimitives.ReadUInt16BigEndian(data);
         }
 
-        object value = transformer.GetValue(typeReader, data, length, out consumed);
-        storeInteger = typeReader.StoreInteger;
-
-        return value;
+        // Deal with consumed not including this now.
+        return data.Slice(size, length);
     }
 
-    private static TdhTypeTransformer GetTransformer(
-        string propertyName,
-        TdhOutType outType
-    ) => outType switch
+    public string GetString(ReadOnlySpan<byte> data, int length, Encoding? encoding, out int consumed)
     {
-        TdhOutType.TDH_OUTTYPE_STRING => new TdhStringTransformer(),
-        // TdhOutType.TDH_OUTTYPE_DATETIME => new TdhByteTransformer(),
-        TdhOutType.TDH_OUTTYPE_BYTE => new TdhByteTransformer(),
-        TdhOutType.TDH_OUTTYPE_UNSIGNEDBYTE => new TdhUnsignedByteTransformer(),
-        TdhOutType.TDH_OUTTYPE_SHORT => new TdhShortTransformer(),
-        TdhOutType.TDH_OUTTYPE_UNSIGNEDSHORT => new TdhUnsignedShortTransformer(),
-        TdhOutType.TDH_OUTTYPE_INT => new TdhIntTransformer(),
-        TdhOutType.TDH_OUTTYPE_UNSIGNEDINT => new TdhUnsignedIntTransformer(),
-        TdhOutType.TDH_OUTTYPE_LONG => new TdhLongTransformer(),
-        TdhOutType.TDH_OUTTYPE_UNSIGNEDLONG => new TdhUnsignedLongTransformer(),
-        // TdhOutType.TDH_OUTTYPE_FLOAT => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_DOUBLE => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_BOOLEAN => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_GUID => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_HEXBINARY => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_HEXINT8 => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_HEXINT16 => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_HEXINT32 => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_HEXINT64 => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_PID => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_TID => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_PORT => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_IPV4 => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_IPV6 => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_SOCKETADDRESS => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_CIMDATETIME => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_ETWTIME => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_XML => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_ERRORCODE => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_WIN32ERROR => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_NTSTATUS => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_HRESULT => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_CULTURE_INSENSITIVE_DATETIME => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_JSON => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_UTF8 => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_PKCS7_WITH_TYPE_INFO => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_CODE_POINTER => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_DATETIME_UTC => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_REDUCEDSTRING => new TdhByteTransformer(),
-        // TdhOutType.TDH_OUTTYPE_NOPRINT => new TdhByteTransformer(),
-        _ => throw new NotImplementedException($"Property '{propertyName}' has unknown output type, cannot unpack"),
-    };
+        ReadOnlySpan<byte> actualData = GetBytes(data, length);
+        consumed = actualData.Length;
 
-    protected ReadOnlySpan<byte> GetBytes(
-        TdhTypeReader reader,
-        ReadOnlySpan<byte> data,
-        short length,
-        out int consumed)
-    {
-        ReadOnlySpan<byte> raw = reader.GetBytes(data, length);
-        consumed = raw.Length;
-
-        return raw;
-    }
-
-    protected abstract object GetValue(
-        TdhTypeReader reader,
-        ReadOnlySpan<byte> data,
-        short length,
-        out int consumed);
-}
-
-internal class TdhStringTransformer : TdhTypeTransformer
-{
-    protected override object GetValue(
-        TdhTypeReader reader,
-        ReadOnlySpan<byte> data,
-        short length,
-        out int consumed)
-    {
-        if (reader is ITdhStringReader stringReader)
-        {
-            return stringReader.GetString(data, length, out consumed);
-        }
-
-        throw new InvalidOperationException($"Cannot create a string with the in type {reader.GetType().Name}");
-    }
-}
-
-internal class TdhByteTransformer : TdhTypeTransformer
-{
-    protected override object GetValue(
-        TdhTypeReader reader,
-        ReadOnlySpan<byte> data,
-        short length,
-        out int consumed)
-    {
-        return GetBytes(reader, data, length, out consumed)[0];
-    }
-}
-
-internal class TdhUnsignedByteTransformer : TdhTypeTransformer
-{
-    protected override object GetValue(
-        TdhTypeReader reader,
-        ReadOnlySpan<byte> data,
-        short length,
-        out int consumed)
-    {
-        return unchecked((sbyte)GetBytes(reader, data, length, out consumed)[0]);
-    }
-}
-
-internal class TdhShortTransformer : TdhTypeTransformer
-{
-    protected override object GetValue(
-        TdhTypeReader reader,
-        ReadOnlySpan<byte> data,
-        short length,
-        out int consumed)
-    {
-        return BinaryPrimitives.ReadInt16LittleEndian(
-            GetBytes(reader, data, length, out consumed));
-    }
-}
-
-internal class TdhUnsignedShortTransformer : TdhTypeTransformer
-{
-    protected override object GetValue(
-        TdhTypeReader reader,
-        ReadOnlySpan<byte> data,
-        short length,
-        out int consumed)
-    {
-        return BinaryPrimitives.ReadUInt16LittleEndian(
-            GetBytes(reader, data, length, out consumed));
-    }
-}
-
-internal class TdhIntTransformer : TdhTypeTransformer
-{
-    protected override object GetValue(
-         TdhTypeReader reader,
-         ReadOnlySpan<byte> data,
-         short length,
-         out int consumed)
-    {
-        return BinaryPrimitives.ReadInt32LittleEndian(
-            GetBytes(reader, data, length, out consumed));
-    }
-}
-
-internal class TdhUnsignedIntTransformer : TdhTypeTransformer
-{
-    protected override object GetValue(
-        TdhTypeReader reader,
-        ReadOnlySpan<byte> data,
-        short length,
-        out int consumed)
-    {
-        return BinaryPrimitives.ReadUInt32LittleEndian(
-            GetBytes(reader, data, length, out consumed));
-    }
-}
-
-internal class TdhLongTransformer : TdhTypeTransformer
-{
-    protected override object GetValue(
-        TdhTypeReader reader,
-        ReadOnlySpan<byte> data,
-        short length,
-        out int consumed)
-    {
-        return BinaryPrimitives.ReadInt64LittleEndian(
-            GetBytes(reader, data, length, out consumed));
-    }
-}
-
-internal class TdhUnsignedLongTransformer : TdhTypeTransformer
-{
-    protected override object GetValue(
-        TdhTypeReader reader,
-        ReadOnlySpan<byte> data,
-        short length,
-        out int consumed)
-    {
-        return BinaryPrimitives.ReadUInt64LittleEndian(
-            GetBytes(reader, data, length, out consumed));
+        // Deal with ANSI vs Unicode for the in type.
+        return TdhStringReader.SpanToString(actualData, encoding ?? Encoding.Unicode);
     }
 }
