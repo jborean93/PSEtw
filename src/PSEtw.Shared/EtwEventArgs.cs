@@ -294,39 +294,6 @@ public sealed class EventPropertyInfo
         ref Tdh.EVENT_PROPERTY_INFO info = ref properties[0];
         string? name = EtwEventArgs.ReadPtrString(buffer, info.NameOffset);
 
-        // We store scalar integer values in case they are needed for
-        // subsequent properties that reference back to them.
-        if (
-            !info.Flags.HasFlag(EventPropertyFlags.PropertyStruct | EventPropertyFlags.PropertyParamCount) &&
-            info.Count == 1
-        )
-        {
-            switch ((TdhInType)info.InType)
-            {
-                case TdhInType.TDH_INTYPE_INT8:
-                case TdhInType.TDH_INTYPE_UINT8:
-                    integerValues[index] = userData[0];
-                    break;
-
-                case TdhInType.TDH_INTYPE_INT16:
-                case TdhInType.TDH_INTYPE_UINT16:
-                    integerValues[index] = BinaryPrimitives.ReadInt16LittleEndian(userData);
-                    break;
-
-                case TdhInType.TDH_INTYPE_INT32:
-                case TdhInType.TDH_INTYPE_UINT32:
-                case TdhInType.TDH_INTYPE_HEXINT32:
-                    integerValues[index] = (short)(BinaryPrimitives.ReadInt32LittleEndian(userData) & 0xFFFF);
-                    break;
-
-                case TdhInType.TDH_INTYPE_INT64:
-                case TdhInType.TDH_INTYPE_UINT64:
-                case TdhInType.TDH_INTYPE_HEXINT64:
-                    integerValues[index] = (short)(BinaryPrimitives.ReadInt64LittleEndian(userData) & 0xFFFF);
-                    break;
-            }
-        }
-
         TdhInType inType = (TdhInType)info.InType;
         TdhOutType outType = (TdhOutType)info.OutType;
         short propLength = GetPropertyLength(
@@ -363,19 +330,20 @@ public sealed class EventPropertyInfo
             }
             else
             {
-                object outValue = GetDataOutValue(
-                    name ?? "<no name>",
-                    headerFlags,
-                    userData,
-                    propLength,
-                    inType,
-                    outType,
-                    integerValues,
-                    index,
-                    out int valueConsumed);
-                userData = userData.Slice(valueConsumed);
-                consumed += valueConsumed;
-                values.Add(outValue);
+                // TdhTypeReader transformer = TdhTypeReader.Create(
+                //     name,
+                //     headerFlags,
+                //     inType);
+
+                // object outValue = transformer.GetValue(userData, outType, out int valueConsumed);
+                // if (transformer.StoreInteger != null && !isArray)
+                // {
+                //     integerValues[index] = (short)transformer.StoreInteger;
+                // }
+
+                // userData = userData.Slice(valueConsumed);
+                // consumed += valueConsumed;
+                // values.Add(outValue);
             }
         }
 
@@ -402,7 +370,8 @@ public sealed class EventPropertyInfo
             !flags.HasFlag(EventPropertyFlags.PropertyParamLength | EventPropertyFlags.PropertyParamFixedLength)
         )
         {
-            // Special case for incorrectly-defined IPV6 addresses.
+            // Special case for IPV6 addresses. The tdh.h header mentions this
+            // under the TDH_OUTTYPE_IPV6 entry.
             return 16;
         }
         else if (flags.HasFlag(EventPropertyFlags.PropertyParamLength))
@@ -420,125 +389,4 @@ public sealed class EventPropertyInfo
         short value,
         ReadOnlySpan<short> propertyValues
     ) => flags.HasFlag(EventPropertyFlags.PropertyParamCount) ? propertyValues[value] : value;
-
-    private static object GetDataOutValue(
-        string name,
-        HeaderFlags headerFlags,
-        ReadOnlySpan<byte> data,
-        short length,
-        TdhInType inType,
-        TdhOutType outType,
-        Span<short> integerValue,
-        int index,
-        out int consumed)
-    {
-        consumed = 0;
-        object? value = null;
-        switch (inType)
-        {
-            case TdhInType.TDH_INTYPE_INT8:
-            case TdhInType.TDH_INTYPE_UINT8:
-            case TdhInType.TDH_INTYPE_ANSICHAR:
-                consumed = 1;
-                break;
-
-            case TdhInType.TDH_INTYPE_INT16:
-            case TdhInType.TDH_INTYPE_UINT16:
-            case TdhInType.TDH_INTYPE_UNICODECHAR:
-                consumed = 2;
-                break;
-
-            case TdhInType.TDH_INTYPE_INT32:
-            case TdhInType.TDH_INTYPE_UINT32:
-            case TdhInType.TDH_INTYPE_FLOAT:
-            case TdhInType.TDH_INTYPE_BOOLEAN:
-            case TdhInType.TDH_INTYPE_HEXINT32:
-                consumed = 4;
-                break;
-
-            case TdhInType.TDH_INTYPE_INT64:
-            case TdhInType.TDH_INTYPE_UINT64:
-            case TdhInType.TDH_INTYPE_DOUBLE:
-            case TdhInType.TDH_INTYPE_FILETIME:
-            case TdhInType.TDH_INTYPE_HEXINT64:
-                consumed = 8;
-                break;
-
-            case TdhInType.TDH_INTYPE_GUID:
-            case TdhInType.TDH_INTYPE_SYSTEMTIME:
-                consumed = 16;
-                break;
-
-            case TdhInType.TDH_INTYPE_BINARY:
-                consumed = length;
-                break;
-
-            case TdhInType.TDH_INTYPE_POINTER:
-            case TdhInType.TDH_INTYPE_SIZET:
-                consumed = headerFlags switch
-                {
-                    HeaderFlags.EVENT_HEADER_FLAG_32_BIT_HEADER => 4,
-                    HeaderFlags.EVENT_HEADER_FLAG_64_BIT_HEADER => 8,
-                    _ => IntPtr.Size,
-                };
-                break;
-
-            case TdhInType.TDH_INTYPE_MANIFEST_COUNTEDSTRING:
-            case TdhInType.TDH_INTYPE_MANIFEST_COUNTEDANSISTRING:
-            case TdhInType.TDH_INTYPE_MANIFEST_COUNTEDBINARY:
-            case TdhInType.TDH_INTYPE_COUNTEDSTRING:
-            case TdhInType.TDH_INTYPE_COUNTEDANSISTRING:
-                consumed = BinaryPrimitives.ReadInt16LittleEndian(data);
-                break;
-
-            case TdhInType.TDH_INTYPE_REVERSEDCOUNTEDSTRING:
-            case TdhInType.TDH_INTYPE_REVERSEDCOUNTEDANSISTRING:
-                consumed = BinaryPrimitives.ReadInt16BigEndian(data);
-                break;
-
-            case TdhInType.TDH_INTYPE_HEXDUMP:
-                consumed = BinaryPrimitives.ReadInt32LittleEndian(data);
-                break;
-
-            case TdhInType.TDH_INTYPE_UNICODESTRING:
-            case TdhInType.TDH_INTYPE_NONNULLTERMINATEDSTRING:
-                string uniValue = "";
-                consumed = uniValue.Length * 2;  // Also add NULL char
-                value = uniValue;
-                break;
-
-
-            case TdhInType.TDH_INTYPE_ANSISTRING:
-            case TdhInType.TDH_INTYPE_NONNULLTERMINATEDANSISTRING:
-                string ansiValue = "";
-                consumed = ansiValue.Length;  // Also add NULL char
-                value = ansiValue;
-                break;
-
-            case TdhInType.TDH_INTYPE_SID:
-            case TdhInType.TDH_INTYPE_WBEMSID:
-                SecurityIdentifier sid;
-                unsafe
-                {
-                    fixed (byte* bytePtr = data)
-                    {
-                        sid = new((nint)bytePtr);
-                    }
-                }
-                consumed = sid.BinaryLength;
-                value = sid;
-                break;
-
-            default:
-                throw new NotImplementedException(
-                    $"Event Property '{name}' has TDH_INTYPE {inType} that is not implemented");
-        }
-
-        if (value != null)
-        {
-            return value;
-        }
-
-        return 0;
-    }
 }
