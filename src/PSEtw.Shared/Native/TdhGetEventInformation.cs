@@ -105,7 +105,7 @@ applicable OutTypes can be found in winmeta.xml. For legacy WBEM InType values
 (i.e. values not defined in winmeta.xml), the details for each InType are
 included below.
 */
-public enum TdhInType
+public enum TdhInType : short
 {
     TDH_INTYPE_NULL, /* Invalid InType value. */
     TDH_INTYPE_UNICODESTRING, /*
@@ -287,7 +287,7 @@ InType+OutType combination is not recognized by a decoder, the decoder should
 use the default OutType associated with the field's InType (i.e. the decoder
 should behave as if the OutType were NULL).
 */
-enum TdhOutType
+enum TdhOutType : short
 {
     TDH_OUTTYPE_NULL, /*
         Default OutType value. If a field's OutType is set to this value, the

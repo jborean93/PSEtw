@@ -1,10 +1,8 @@
 using PSEtw.Shared.Native;
 using System;
-using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
-using System.Security.Principal;
 using System.Threading;
 
 namespace PSEtw.Shared;
@@ -84,7 +82,7 @@ public sealed class EtwEventArgs : EventArgs
                 EventInfo info = new(
                     ref eventInfo[0],
                     buffer,
-                    record.EventHeader.Flags,
+                    GetPointerSize(record.EventHeader.Flags),
                     record.UserData,
                     record.UserDataLength);
 
@@ -94,6 +92,22 @@ public sealed class EtwEventArgs : EventArgs
         finally
         {
             Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    private static int GetPointerSize(HeaderFlags flags)
+    {
+        if (flags.HasFlag(HeaderFlags.EVENT_HEADER_FLAG_32_BIT_HEADER))
+        {
+            return 4;
+        }
+        else if (flags.HasFlag(HeaderFlags.EVENT_HEADER_FLAG_64_BIT_HEADER))
+        {
+            return 8;
+        }
+        else
+        {
+            return IntPtr.Size;
         }
     }
 
@@ -170,11 +184,10 @@ public sealed class EventInfo
     public string? RelatedActivityIdName { get; }
     public EventPropertyInfo[] Properties { get; }
 
-
     internal EventInfo(
         ref Tdh.TRACE_EVENT_INFO info,
         nint buffer,
-        HeaderFlags headerFlags,
+        int pointerSize,
         nint userData,
         short userDataLength)
     {
@@ -190,19 +203,21 @@ public sealed class EventInfo
         EventName = EtwEventArgs.ReadPtrString(buffer, info.EventNameOffset);
         RelatedActivityIdName = EtwEventArgs.ReadPtrString(buffer, info.RelatedActivityIDNameOffset);
         Properties = ReadProperties(
+            ref info,
             buffer,
             info.TopLevelPropertyCount,
             info.PropertyCount,
-            headerFlags,
+            pointerSize,
             userData,
             userDataLength);
     }
 
     private static EventPropertyInfo[] ReadProperties(
+        ref Tdh.TRACE_EVENT_INFO info,
         nint buffer,
         int count,
         int totalCount,
-        HeaderFlags headerFlags,
+        int pointerSize,
         nint userData,
         short userDataLength)
     {
@@ -229,11 +244,12 @@ public sealed class EventInfo
             for (int i = 0; i < count; i++)
             {
                 EventPropertyInfo prop = EventPropertyInfo.Create(
+                    ref info,
                     properties,
                     buffer,
                     i,
                     integerValues,
-                    headerFlags,
+                    pointerSize,
                     userDataBuffer,
                     out int consumed);
                 userDataBuffer = userDataBuffer.Slice(consumed);
@@ -262,7 +278,7 @@ public sealed class EventInfo
             }
             else
             {
-                buffer = IntPtr.Add(buffer, value.Length + 2);
+                buffer = IntPtr.Add(buffer, (value.Length + 1) * 2);
                 values.Add(value.TrimEnd(' '));
             }
         }
@@ -275,19 +291,29 @@ public sealed class EventPropertyInfo
 {
     public string? Name { get; }
     public object Value { get; }
+    public string DisplayValue { get; }
+    public int Tags { get; }
 
-    internal EventPropertyInfo(string? name, object value)
+    internal EventPropertyInfo(string? name, object value, string displayValue, int tags)
     {
         Name = name;
         Value = value;
+        DisplayValue = displayValue;
+        Tags = tags;
+    }
+
+    public override string ToString()
+    {
+        return $"{Name ?? "<noname>"}={DisplayValue}";
     }
 
     internal static EventPropertyInfo Create(
+        ref Tdh.TRACE_EVENT_INFO eventInfo,
         Span<Tdh.EVENT_PROPERTY_INFO> properties,
         nint buffer,
         int index,
         Span<short> integerValues,
-        HeaderFlags headerFlags,
+        int pointerSize,
         ReadOnlySpan<byte> userData,
         out int consumed)
     {
@@ -317,6 +343,7 @@ public sealed class EventPropertyInfo
         }
 
         List<object> values = new();
+        List<string> displayValues = new();
         consumed = 0;
         for (int i = 0; i < arrayCount; i++)
         {
@@ -332,32 +359,47 @@ public sealed class EventPropertyInfo
             {
                 object outValue = TdhTypeReader.Transform(
                     name,
-                    headerFlags,
+                    pointerSize,
                     userData,
                     propLength,
                     inType,
                     outType,
-                    out int valueConsumed,
                     out short? storeInteger);
+
+                string? displayValue = FormatProperty(
+                    ref eventInfo,
+                    pointerSize,
+                    propLength,
+                    inType,
+                    outType,
+                    userData,
+                    out short dataConsumed);
 
                 if (storeInteger != null && !isArray)
                 {
                     integerValues[index] = (short)storeInteger;
                 }
 
-                userData = userData.Slice(valueConsumed);
-                consumed += valueConsumed;
+                userData = userData.Slice(dataConsumed);
+                consumed += dataConsumed;
+                displayValues.Add(displayValue ?? outValue.ToString() ?? "");
                 values.Add(outValue);
             }
         }
 
-        // int tags = 0;
-        // if (info.Flags.HasFlag(EventPropertyFlags.PropertyHasTags))
-        // {
-        //     // Tags are only a 28-bit value, the leading byte is reserved
-        //     tags = info.Tags & 0x0FFFFFFF;
-        // }
-        return new(name, isArray ? values.ToArray() : values[0]);
+        int tags = 0;
+        if (info.Flags.HasFlag(EventPropertyFlags.PropertyHasTags))
+        {
+            // Tags are only a 28-bit value, the leading byte is reserved
+            tags = info.Tags & 0x0FFFFFFF;
+        }
+
+        return new(
+            name,
+            isArray ? values.ToArray() : values[0],
+            string.Join(", ", displayValues),
+            tags
+        );
     }
 
     private static short GetPropertyLength(
@@ -393,4 +435,62 @@ public sealed class EventPropertyInfo
         short value,
         ReadOnlySpan<short> propertyValues
     ) => flags.HasFlag(EventPropertyFlags.PropertyParamCount) ? propertyValues[value] : value;
+
+    private static string? FormatProperty(
+        ref Tdh.TRACE_EVENT_INFO info,
+        int pointerSize,
+        short propertyLength,
+        TdhInType inType,
+        TdhOutType outType,
+        ReadOnlySpan<byte> userData,
+        out short consumed)
+    {
+        unsafe
+        {
+            fixed (byte* userDataPtr = userData)
+            {
+                int bufferSize = 1024;
+                nint buffer = Marshal.AllocHGlobal(bufferSize);
+                try
+                {
+                    while (true)
+                    {
+                        int res = Tdh.TdhFormatProperty(
+                            ref info,
+                            IntPtr.Zero,  // mapInfo
+                            pointerSize,
+                            (short)inType,
+                            (short)outType,
+                            propertyLength,
+                            (short)userData.Length,
+                            (nint)userDataPtr,
+                            ref bufferSize,
+                            buffer,
+                            out consumed);
+
+                        if (res == 0x0000007A)  // ERROR_INSUFFICIENT_BUFFER
+                        {
+                            buffer = Marshal.ReAllocHGlobal(buffer, (nint)bufferSize);
+                            continue;
+                        }
+                        else if (res == 0)
+                        {
+                            // The buffer is a null terminated WCHAR so we
+                            // divide the bytes by 2 and remove the null char.
+                            int stringLength = (bufferSize / 2) - 1;
+                            return Marshal.PtrToStringUni(buffer, stringLength);
+                        }
+
+                        // On an error the caller uses ToString() on our
+                        // managed object of the property.
+                        return null;
+                    }
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(buffer);
+                }
+            }
+        }
+    }
 }
