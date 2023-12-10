@@ -4,12 +4,16 @@ using System.Buffers.Binary;
 using System.Globalization;
 using System.Net;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
 using System.Text;
 
 namespace PSEtw.Shared;
 
 internal class TdhTypeReader
 {
+    internal static readonly Encoding ANSIEncoding = Encoding.GetEncoding(
+        CultureInfo.CurrentCulture.TextInfo.ANSICodePage);
+
     protected short? StoreInteger { get; set; } = null;
 
     protected virtual ReadOnlySpan<byte> GetBytes(ReadOnlySpan<byte> data, int length)
@@ -46,67 +50,167 @@ internal class TdhTypeReader
         return value;
     }
 
+    protected static string SpanToString(ReadOnlySpan<byte> data, Encoding encoding)
+    {
+#if NET6_0_OR_GREATER
+        return encoding.GetString(data);
+#else
+        unsafe
+        {
+            fixed (byte* bytePtr = data)
+            {
+                return encoding.GetString(bytePtr, data.Length);
+            }
+        }
+#endif
+    }
+
     private static (TdhTypeReader, TdhOutType) GetReader(
         string? propertyName,
         int pointerSize,
         TdhInType inType
     ) => inType switch
     {
-        TdhInType.TDH_INTYPE_UNICODESTRING => (new TdhStringReader(Encoding.Unicode), TdhOutType.TDH_OUTTYPE_STRING),
+        TdhInType.TDH_INTYPE_UNICODESTRING => (
+            new TdhNullTerminatedStringReader(Encoding.Unicode),
+            TdhOutType.TDH_OUTTYPE_STRING),
+
         TdhInType.TDH_INTYPE_ANSISTRING => (
-            new TdhStringReader(TdhStringReader.ANSIEncoding), TdhOutType.TDH_OUTTYPE_STRING
-        ),
-        TdhInType.TDH_INTYPE_INT8 => (new TdhIntegerReader(1), TdhOutType.TDH_OUTTYPE_BYTE),
-        TdhInType.TDH_INTYPE_UINT8 => (new TdhIntegerReader(1), TdhOutType.TDH_OUTTYPE_UNSIGNEDBYTE),
-        TdhInType.TDH_INTYPE_INT16 => (new TdhIntegerReader(2), TdhOutType.TDH_OUTTYPE_SHORT),
-        TdhInType.TDH_INTYPE_UINT16 => (new TdhIntegerReader(2), TdhOutType.TDH_OUTTYPE_UNSIGNEDSHORT),
-        TdhInType.TDH_INTYPE_INT32 => (new TdhIntegerReader(4), TdhOutType.TDH_OUTTYPE_INT),
-        TdhInType.TDH_INTYPE_UINT32 => (new TdhIntegerReader(4), TdhOutType.TDH_OUTTYPE_UNSIGNEDINT),
-        TdhInType.TDH_INTYPE_INT64 => (new TdhIntegerReader(8), TdhOutType.TDH_OUTTYPE_LONG),
-        TdhInType.TDH_INTYPE_UINT64 => (new TdhIntegerReader(8), TdhOutType.TDH_OUTTYPE_UNSIGNEDLONG),
-        TdhInType.TDH_INTYPE_FLOAT => (new TdhIntegerReader(4), TdhOutType.TDH_OUTTYPE_FLOAT),
-        TdhInType.TDH_INTYPE_DOUBLE => (new TdhIntegerReader(8), TdhOutType.TDH_OUTTYPE_DOUBLE),
-        TdhInType.TDH_INTYPE_BOOLEAN => (new TdhIntegerReader(4), TdhOutType.TDH_OUTTYPE_BOOLEAN),
-        TdhInType.TDH_INTYPE_BINARY => (new TdhTypeReader(), TdhOutType.TDH_OUTTYPE_HEXBINARY),
-        TdhInType.TDH_INTYPE_GUID => (new TdhIntegerReader(16), TdhOutType.TDH_OUTTYPE_GUID),
+            new TdhNullTerminatedStringReader(ANSIEncoding),
+            TdhOutType.TDH_OUTTYPE_STRING),
+
+        TdhInType.TDH_INTYPE_INT8 => (
+            new TdhFixedLengthReader(1),
+            TdhOutType.TDH_OUTTYPE_BYTE),
+
+        TdhInType.TDH_INTYPE_UINT8 => (
+            new TdhFixedLengthReader(1),
+            TdhOutType.TDH_OUTTYPE_UNSIGNEDBYTE),
+
+        TdhInType.TDH_INTYPE_INT16 => (
+            new TdhFixedLengthReader(2),
+            TdhOutType.TDH_OUTTYPE_SHORT),
+
+        TdhInType.TDH_INTYPE_UINT16 => (
+            new TdhFixedLengthReader(2),
+            TdhOutType.TDH_OUTTYPE_UNSIGNEDSHORT),
+
+        TdhInType.TDH_INTYPE_INT32 => (
+            new TdhFixedLengthReader(4),
+            TdhOutType.TDH_OUTTYPE_INT),
+
+        TdhInType.TDH_INTYPE_UINT32 => (
+            new TdhFixedLengthReader(4),
+            TdhOutType.TDH_OUTTYPE_UNSIGNEDINT),
+
+        TdhInType.TDH_INTYPE_INT64 => (
+            new TdhFixedLengthReader(8),
+            TdhOutType.TDH_OUTTYPE_LONG),
+
+        TdhInType.TDH_INTYPE_UINT64 => (
+            new TdhFixedLengthReader(8),
+            TdhOutType.TDH_OUTTYPE_UNSIGNEDLONG),
+
+        TdhInType.TDH_INTYPE_FLOAT => (
+            new TdhFixedLengthReader(4),
+            TdhOutType.TDH_OUTTYPE_FLOAT),
+
+        TdhInType.TDH_INTYPE_DOUBLE => (
+            new TdhFixedLengthReader(8),
+            TdhOutType.TDH_OUTTYPE_DOUBLE),
+
+        TdhInType.TDH_INTYPE_BOOLEAN => (
+            new TdhFixedLengthReader(4),
+            TdhOutType.TDH_OUTTYPE_BOOLEAN),
+
+        TdhInType.TDH_INTYPE_BINARY => (
+            new TdhTypeReader(),
+            TdhOutType.TDH_OUTTYPE_HEXBINARY),
+
+        TdhInType.TDH_INTYPE_GUID => (
+            new TdhFixedLengthReader(16),
+            TdhOutType.TDH_OUTTYPE_GUID),
+
         TdhInType.TDH_INTYPE_POINTER => (
-            new TdhIntegerReader(pointerSize), TdhOutType.TDH_OUTTYPE_HEXINT64
-        ),
-        TdhInType.TDH_INTYPE_FILETIME => (new TdhIntegerReader(8), TdhOutType.TDH_OUTTYPE_DATETIME),
-        TdhInType.TDH_INTYPE_SYSTEMTIME => (new TdhIntegerReader(16), TdhOutType.TDH_OUTTYPE_DATETIME),
-        // TdhInType.TDH_INTYPE_SID => (new TdhIntType(propertyName), TdhOutType.TDH_OUTTYPE_STRING),
-        TdhInType.TDH_INTYPE_HEXINT32 => (new TdhIntegerReader(4), TdhOutType.TDH_OUTTYPE_HEXINT32),
-        TdhInType.TDH_INTYPE_HEXINT64 => (new TdhIntegerReader(8), TdhOutType.TDH_OUTTYPE_HEXINT64),
+            new TdhFixedLengthReader(pointerSize),
+            TdhOutType.TDH_OUTTYPE_HEXINT64),
+
+        TdhInType.TDH_INTYPE_FILETIME => (
+            new TdhFixedLengthReader(8),
+            TdhOutType.TDH_OUTTYPE_DATETIME),
+
+        TdhInType.TDH_INTYPE_SYSTEMTIME => (
+            new TdhFixedLengthReader(16),
+            TdhOutType.TDH_OUTTYPE_DATETIME),
+
+        TdhInType.TDH_INTYPE_SID => (
+            new TdhSecurityIdentifierReader(),
+            TdhOutType.TDH_OUTTYPE_STRING),
+
+        TdhInType.TDH_INTYPE_HEXINT32 => (
+            new TdhFixedLengthReader(4),
+            TdhOutType.TDH_OUTTYPE_HEXINT32),
+
+        TdhInType.TDH_INTYPE_HEXINT64 => (
+            new TdhFixedLengthReader(8),
+            TdhOutType.TDH_OUTTYPE_HEXINT64),
+
         TdhInType.TDH_INTYPE_MANIFEST_COUNTEDSTRING => (
-            new TdhBinaryLengthReader(true), TdhOutType.TDH_OUTTYPE_STRING
-        ),
+            new TdhCountedLengthReader(Encoding.Unicode, true),
+            TdhOutType.TDH_OUTTYPE_STRING),
+
         TdhInType.TDH_INTYPE_MANIFEST_COUNTEDANSISTRING => (
-            new TdhBinaryLengthReader(true), TdhOutType.TDH_OUTTYPE_STRING
-        ),
+            new TdhCountedLengthReader(ANSIEncoding, true),
+            TdhOutType.TDH_OUTTYPE_STRING),
+
         TdhInType.TDH_INTYPE_MANIFEST_COUNTEDBINARY => (
-            new TdhBinaryLengthReader(true), TdhOutType.TDH_OUTTYPE_HEXBINARY
-        ),
-        TdhInType.TDH_INTYPE_COUNTEDSTRING => (new TdhBinaryLengthReader(true), TdhOutType.TDH_OUTTYPE_STRING),
-        TdhInType.TDH_INTYPE_COUNTEDANSISTRING => (new TdhBinaryLengthReader(true), TdhOutType.TDH_OUTTYPE_STRING),
-        TdhInType.TDH_INTYPE_REVERSEDCOUNTEDSTRING => (new TdhBinaryLengthReader(false), TdhOutType.TDH_OUTTYPE_STRING),
+            new TdhCountedLengthReader(Encoding.Unicode, true),
+            TdhOutType.TDH_OUTTYPE_HEXBINARY),
+
+        TdhInType.TDH_INTYPE_COUNTEDSTRING => (
+            new TdhCountedLengthReader(Encoding.Unicode, true),
+            TdhOutType.TDH_OUTTYPE_STRING),
+
+        TdhInType.TDH_INTYPE_COUNTEDANSISTRING => (
+            new TdhCountedLengthReader(ANSIEncoding, true),
+            TdhOutType.TDH_OUTTYPE_STRING),
+
+        TdhInType.TDH_INTYPE_REVERSEDCOUNTEDSTRING => (
+            new TdhCountedLengthReader(Encoding.Unicode, false),
+            TdhOutType.TDH_OUTTYPE_STRING),
+
         TdhInType.TDH_INTYPE_REVERSEDCOUNTEDANSISTRING => (
-            new TdhBinaryLengthReader(false), TdhOutType.TDH_OUTTYPE_STRING
-        ),
+            new TdhCountedLengthReader(ANSIEncoding, false),
+            TdhOutType.TDH_OUTTYPE_STRING),
+
         TdhInType.TDH_INTYPE_NONNULLTERMINATEDSTRING => (
-            new TdhStringReader(Encoding.Unicode), TdhOutType.TDH_OUTTYPE_STRING
-        ),
+            new TdhNullTerminatedStringReader(Encoding.Unicode),
+            TdhOutType.TDH_OUTTYPE_STRING),
+
         TdhInType.TDH_INTYPE_NONNULLTERMINATEDANSISTRING => (
-            new TdhStringReader(TdhStringReader.ANSIEncoding), TdhOutType.TDH_OUTTYPE_STRING
-        ),
-        TdhInType.TDH_INTYPE_UNICODECHAR => (new TdhIntegerReader(2), TdhOutType.TDH_OUTTYPE_STRING),
-        TdhInType.TDH_INTYPE_ANSICHAR => (new TdhIntegerReader(1), TdhOutType.TDH_OUTTYPE_STRING),
+            new TdhNullTerminatedStringReader(ANSIEncoding),
+            TdhOutType.TDH_OUTTYPE_STRING),
+
+        TdhInType.TDH_INTYPE_UNICODECHAR => (
+            new TdhFixedLengthReader(2),
+            TdhOutType.TDH_OUTTYPE_STRING),
+
+        TdhInType.TDH_INTYPE_ANSICHAR => (
+            new TdhFixedLengthReader(1),
+            TdhOutType.TDH_OUTTYPE_STRING),
+
         TdhInType.TDH_INTYPE_SIZET => (
-            new TdhIntegerReader(pointerSize), TdhOutType.TDH_OUTTYPE_HEXINT64
-        ),
+            new TdhFixedLengthReader(pointerSize),
+            TdhOutType.TDH_OUTTYPE_HEXINT64),
+
         TdhInType.TDH_INTYPE_HEXDUMP => (
-            new TdhBinaryLengthReader(true, lengthIsShort: false), TdhOutType.TDH_OUTTYPE_HEXBINARY
-        ),
-        // TdhInType.TDH_INTYPE_WBEMSID => (new TdhIntType(propertyName), TdhOutType.TDH_OUTTYPE_STRING),
+            new TdhCountedLengthReader(Encoding.Unicode, true, lengthIsShort: false),
+            TdhOutType.TDH_OUTTYPE_HEXBINARY),
+
+        TdhInType.TDH_INTYPE_WBEMSID => (
+            new TdhSecurityIdentifierReader(),
+            TdhOutType.TDH_OUTTYPE_STRING),
+
         _ => throw new NotImplementedException($"Property '{propertyName}' has unknown input type, cannot unpack"),
     };
 
@@ -372,90 +476,61 @@ internal class TdhTypeReader
     }
 }
 
-
 internal interface ITdhStringReader
 {
-    public string GetString(
-        ReadOnlySpan<byte> data,
-        int length,
-        Encoding? encoding);
+    public string GetString(ReadOnlySpan<byte> data, int length, Encoding? encoding);
 }
 
-internal class TdhStringReader : TdhTypeReader, ITdhStringReader
+internal class TdhNullTerminatedStringReader : TdhTypeReader, ITdhStringReader
 {
-    internal static readonly Encoding ANSIEncoding = Encoding.GetEncoding(CultureInfo.CurrentCulture.TextInfo.ANSICodePage);
-
     private Encoding _encoding;
-    private int _charSize;
 
-    public TdhStringReader(Encoding encoding)
+    public TdhNullTerminatedStringReader(Encoding encoding)
     {
-        _charSize = encoding == Encoding.Unicode ? 2 : 1;
         _encoding = encoding;
     }
 
     protected override ReadOnlySpan<byte> GetBytes(ReadOnlySpan<byte> data, int length)
+        => GetBytes(data, length, _encoding);
+
+    private ReadOnlySpan<byte> GetBytes(ReadOnlySpan<byte> data, int length, Encoding encoding)
     {
+        // int charSize = encoding.GetByteCount(new[] { (char)0 });
+        Span<byte> nullTerminator = encoding.GetBytes(new[] { (char)0 });
+
         if (length > 0)
         {
-            return data.Slice(0, length * _charSize);
+            return data.Slice(0, length * nullTerminator.Length);
         }
 
-        Span<byte> nullTerminator = stackalloc byte[_charSize];
-        for (int i = 0; i < _charSize; i++)
-        {
-            nullTerminator[i] = 0;
-        }
-
-        int nullIdx = data.IndexOfAny(nullTerminator);
+        int nullIdx = data.IndexOf(nullTerminator);
         if (nullIdx == -1)
         {
             return data;
         }
         else
         {
-            return data.Slice(0, nullIdx + _charSize - 1);
+            // We don't want to include the null terminator in the final bytes.
+            return data.Slice(0, nullIdx - 1);
         }
     }
 
     public string GetString(ReadOnlySpan<byte> data, int length, Encoding? encoding)
     {
-        ReadOnlySpan<byte> actualData = GetBytes(data, length);
+        encoding ??= _encoding;
+        ReadOnlySpan<byte> raw = GetBytes(data, length, encoding);
 
-        // If no length was specified the data will include the null terminator
-        // which we don't want in the final string.
-        // FIXME: Check that end is the null char first.
-        // FIXME: Length might be problematic with UTF8 string
-        if (length == 0 && actualData.Length < data.Length)
-        {
-            actualData = actualData.Slice(0, actualData.Length - _charSize);
-        }
-
-        return SpanToString(actualData, encoding ?? _encoding);
-    }
-
-    internal static string SpanToString(ReadOnlySpan<byte> data, Encoding encoding)
-    {
-#if NET6_0_OR_GREATER
-        return encoding.GetString(data);
-#else
-        // .NET Framework does not have the Span overload.
-        unsafe
-        {
-            fixed (byte* dataPtr = data)
-            {
-                return encoding.GetString(dataPtr, data.Length);
-            }
-        }
-#endif
+        return SpanToString(raw, encoding);
     }
 }
 
-internal class TdhIntegerReader : TdhTypeReader, ITdhStringReader
+internal class TdhFixedLengthReader : TdhTypeReader, ITdhStringReader
 {
     private int _size;
 
-    internal TdhIntegerReader(int size)
+    public Encoding StringEncoding => _size == 1 ? ANSIEncoding : Encoding.Unicode;
+
+    internal TdhFixedLengthReader(int size)
     {
         _size = size;
     }
@@ -484,33 +559,37 @@ internal class TdhIntegerReader : TdhTypeReader, ITdhStringReader
 
     public string GetString(ReadOnlySpan<byte> data, int length, Encoding? encoding)
     {
-        ReadOnlySpan<byte> actualData = GetBytes(data, length);
+        ReadOnlySpan<byte> raw = GetBytes(data, length);
+        if (encoding == null)
+        {
+            if (raw.Length == 1)
+            {
+                encoding = ANSIEncoding;
+            }
+            else if (raw.Length == 2)
+            {
+                encoding = Encoding.Unicode;
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"Cannot get string of fixed length input data of size {raw.Length}");
+            }
+        }
 
-        if (actualData.Length == 1)
-        {
-            encoding = TdhStringReader.ANSIEncoding;
-        }
-        else if (actualData.Length == 2)
-        {
-            encoding = Encoding.Unicode;
-        }
-        else
-        {
-            throw new InvalidOperationException(
-                $"Cannot convert an integer value of size {actualData.Length} to string");
-        }
-
-        return TdhStringReader.SpanToString(actualData, encoding);
+        return SpanToString(raw, encoding);
     }
 }
 
-internal class TdhBinaryLengthReader : TdhTypeReader, ITdhStringReader
+internal class TdhCountedLengthReader : TdhTypeReader, ITdhStringReader
 {
+    private Encoding _encoding;
     private bool _littleEndian;
     private bool _lengthIsShort;
 
-    internal TdhBinaryLengthReader(bool littleEndian, bool lengthIsShort = true)
+    internal TdhCountedLengthReader(Encoding encoding, bool littleEndian, bool lengthIsShort = true)
     {
+        _encoding = encoding;
         _littleEndian = littleEndian;
         _lengthIsShort = lengthIsShort;
     }
@@ -532,15 +611,37 @@ internal class TdhBinaryLengthReader : TdhTypeReader, ITdhStringReader
             length = BinaryPrimitives.ReadUInt16BigEndian(data);
         }
 
-        // Deal with consumed not including this now.
         return data.Slice(size, length);
     }
 
     public string GetString(ReadOnlySpan<byte> data, int length, Encoding? encoding)
-    {
-        ReadOnlySpan<byte> actualData = GetBytes(data, length);
+        => SpanToString(GetBytes(data, length), encoding ?? _encoding);
+}
 
-        // Deal with ANSI vs Unicode for the in type.
-        return TdhStringReader.SpanToString(actualData, encoding ?? Encoding.Unicode);
+internal class TdhSecurityIdentifierReader : TdhTypeReader, ITdhStringReader
+{
+    protected override ReadOnlySpan<byte> GetBytes(ReadOnlySpan<byte> data, int length)
+    {
+        unsafe
+        {
+            fixed (byte* dataPtr = data)
+            {
+                length = Advapi32.GetLengthSid((nint)dataPtr);
+            }
+        }
+
+        return data.Slice(0, length);
+    }
+
+    public string GetString(ReadOnlySpan<byte> data, int length, Encoding? encoding)
+    {
+        ReadOnlySpan<byte> sidBytes = GetBytes(data, 0);
+        unsafe
+        {
+            fixed (byte* sidPtr = sidBytes)
+            {
+                return new SecurityIdentifier((nint)sidPtr).ToString();
+            }
+        }
     }
 }

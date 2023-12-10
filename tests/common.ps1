@@ -82,8 +82,17 @@ Function Global:Invoke-WithTestEtwProvider {
         $ps = [PowerShell]::Create()
         $ps.Runspace = $rs
         [void]$ps.AddCommand("Add-Type").AddParameter("LiteralPath", $etwAssembly).AddStatement()
-        [void]$ps.AddScript('$global:logger = [PSEtwProvider.PSEtwEvent]::new()').AddStatement()
-        [void]$ps.AddScript($ScriptBlock)
+        [void]$ps.AddScript(@'
+param ([Parameter(Mandatory)][string]$ScriptBlock)
+$logger = [PSEtwProvider.PSEtwEvent]::new()
+try {
+    . ([ScriptBlock]::Create($ScriptBlock))
+}
+finally {
+    $logger.Dispose()
+}
+'@)
+        [void]$ps.AddParameter('ScriptBlock', $ScriptBlock)
         [void]$ps.Invoke()
     }
     catch {
