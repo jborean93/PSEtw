@@ -47,4 +47,8 @@ public sealed class PSEtwEvent : EventSource
     [Event(9, Keywords = Keywords.Bar)]
     public void KeywordCustomBar(int myId)
         => WriteEvent(9, myId);
+
+    [Event(10, Keywords = Keywords.Foo | Keywords.Bar)]
+    public void KeywordCustomFooBar(int myId)
+        => WriteEvent(10, myId);
 }
