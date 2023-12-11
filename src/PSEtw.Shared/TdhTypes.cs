@@ -4,6 +4,7 @@ using System.Buffers.Binary;
 using System.Globalization;
 using System.Net;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Security.Principal;
 using System.Text;
 
@@ -633,6 +634,9 @@ internal class TdhSecurityIdentifierReader : TdhTypeReader, ITdhStringReader
         return data.Slice(0, length);
     }
 
+#if NET6_0_OR_GREATER
+    [SupportedOSPlatform("windows")]
+#endif
     public string GetString(ReadOnlySpan<byte> data, int length, Encoding? encoding)
     {
         ReadOnlySpan<byte> sidBytes = GetBytes(data, 0);

@@ -195,6 +195,7 @@ task PesterTests {
         '--targetargs', "`"$pwshArguments`""
         '--output', $coveragePath
         '--format', 'cobertura'
+        '--verbosity', 'minimal'
         if (Test-Path -LiteralPath $unitCoveragePath) {
             '--merge-with', $unitCoveragePath
         }
@@ -218,8 +219,31 @@ task PesterTests {
     }
 }
 
+task CoverageReport {
+    $dotnetTools = @(dotnet tool list --global) -join "`n"
+    if (-not $dotnetTools.Contains('dotnet-reportgenerator-globaltool')) {
+        Write-Host 'Installing dotnet tool dotnet-reportgenerator-globaltool' -ForegroundColor Yellow
+        dotnet tool install --global dotnet-reportgenerator-globaltool
+    }
+
+    $reportPath = [Path]::Combine($Manifest.TestResultsPath, "CoverageReport")
+    $coveragePath = [Path]::Combine($Manifest.TestResultsPath, "Coverage.xml")
+    $reportArgs = @(
+        "-reports:$coveragePath"
+        "-targetdir:$reportPath"
+        '-reporttypes:Html_Dark;JsonSummary'
+    )
+    reportgenerator @reportArgs
+    if ($LASTEXITCODE) {
+        throw "reportgenerator failed with RC of $LASTEXITCODE"
+    }
+
+    $resultPath = [Path]::Combine($reportPath, "Summary.json")
+    Format-CoverageInfo -Path $resultPath
+}
+
 #endregion Test
 
 task Build -Jobs Clean, BuildManaged, BuildModule, BuildDocs, Sign, Package
 
-task Test -Jobs UnitTests, PesterTests
+task Test -Jobs UnitTests, PesterTests, CoverageReport

@@ -79,6 +79,22 @@ jobs:
         name: PSModule
         path: output
 
+    - name: Remove extra modules to speed up PowerShell startup
+      if: startsWith(matrix.os, 'windows')
+      shell: bash
+      run: |
+        rm -rf "/c/Program Files/WindowsPowerShell/Modules/AWSPowerShell"
+        rm -rf "/c/Program Files/WindowsPowerShell/Modules/DockerMsftProvider"
+        rm -rf "/c/Program Files/WindowsPowerShell/Modules/ImageHelpers"
+        rm -rf "/c/Program Files/WindowsPowerShell/Modules/MarkdownPS"
+        rm -rf "/c/Program Files/WindowsPowerShell/Modules/Microsoft."*
+        rm -rf "/c/Program Files/WindowsPowerShell/Modules/PSWindowsUpdate"
+        rm -rf "/c/Program Files/WindowsPowerShell/Modules/SqlServer"
+        rm -rf "/c/Program Files/WindowsPowerShell/Modules/VSSetup"
+        rm -rf "/c/Modules/"*
+
+        ls -al "/c/Program Files/WindowsPowerShell/Modules"
+
     - name: Run Tests
       shell: pwsh
       run: |
