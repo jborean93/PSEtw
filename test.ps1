@@ -91,7 +91,7 @@ try {
     Write-Host "Provider Guid - $providerGuid"
 
     Trace-PSEtwEvent -Provider PSEtw-Event -ErrorAction Continue | ForEach-Object {
-        $_ | ConvertTo-Yaml -Schema $schema | Out-Host
+        $_ | ConvertTo-Yaml -Schema $schema -Depth 5 | Out-Host
         Write-Host ""
 
         if ($_.Header.Descriptor.Id -eq 1) {

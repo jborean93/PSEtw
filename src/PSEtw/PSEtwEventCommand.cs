@@ -14,6 +14,7 @@ public abstract class PSEtwEventBase : PSCmdlet, IDisposable
 
     private EtwTraceSession? _session;
     private bool _freeSession = false;
+    private bool _tracePresent = false;
 
     [Parameter]
     [ArgumentCompleter(typeof(SessionNameCompletor))]
@@ -81,7 +82,6 @@ public abstract class PSEtwEventBase : PSCmdlet, IDisposable
                 };
 
                 ThrowTerminatingError(err);
-                return;
             }
         }
         else
@@ -106,7 +106,6 @@ public abstract class PSEtwEventBase : PSCmdlet, IDisposable
                 };
 
                 ThrowTerminatingError(err);
-                return;
             }
         }
     }
@@ -147,6 +146,7 @@ public abstract class PSEtwEventBase : PSCmdlet, IDisposable
                     trace.Level,
                     trace.KeywordsAny,
                     trace.KeywordsAll);
+                _tracePresent = true;
             }
             catch (Win32Exception e)
             {
@@ -169,7 +169,10 @@ public abstract class PSEtwEventBase : PSCmdlet, IDisposable
     protected override void EndProcessing()
     {
         Debug.Assert(_session != null);
-        StartTrace(_session!.OpenTrace());
+        if (_tracePresent)
+        {
+            StartTrace(_session!.OpenTrace());
+        }
     }
 
     protected abstract void StartTrace(EtwTrace trace);

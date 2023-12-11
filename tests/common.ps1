@@ -4,10 +4,10 @@ using namespace System.Management.Automation.Runspaces
 using namespace System.Security.Principal
 
 $moduleName = (Get-Item ([IO.Path]::Combine($PSScriptRoot, '..', 'module', '*.psd1'))).BaseName
-$manifestPath = [IO.Path]::Combine($PSScriptRoot, '..', 'output', $moduleName)
+$global:ModuleManifest = [IO.Path]::Combine($PSScriptRoot, '..', 'output', $moduleName)
 
 if (-not (Get-Module -Name $moduleName -ErrorAction SilentlyContinue)) {
-    Import-Module $manifestPath
+    Import-Module $ModuleManifest
 }
 
 if (-not (Get-Variable IsWindows -ErrorAction SilentlyContinue)) {

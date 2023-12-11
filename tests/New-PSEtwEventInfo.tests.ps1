@@ -3,6 +3,10 @@
 Describe "New-PSEtwEventInfo" -Skip:(-not $IsAdmin) {
     BeforeAll {
         Install-TestEtwProvider
+
+        if (Test-PSEtwSession -Default) {
+            Remove-PSEtwSession -Default
+        }
     }
 
     AfterAll {

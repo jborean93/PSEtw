@@ -3,6 +3,25 @@ using System.Diagnostics.Tracing;
 
 namespace PSEtwProvider;
 
+public enum IntEnum
+{
+    Value1,
+    Value2,
+    Value3,
+    Value4,
+    Value5
+}
+
+[Flags]
+public enum IntFlags
+{
+    Value1 = 0,
+    Value2 = 1,
+    Value3 = 2,
+    Value4 = 4,
+    Value5 = 8
+}
+
 [EventSource(Name = "PSEtw-Event")]
 public sealed class PSEtwEvent : EventSource
 {
@@ -51,4 +70,51 @@ public sealed class PSEtwEvent : EventSource
     [Event(10, Keywords = Keywords.Foo | Keywords.Bar)]
     public void KeywordCustomFooBar(int myId)
         => WriteEvent(10, myId);
+
+    [Event(11, Level = EventLevel.Informational)]
+    public void TypeTest(
+        bool boolValue,
+        byte byteValue,
+        byte[] byteArray,
+        char charValue,
+        DateTime dateTimeUtc,
+        DateTime dateTimeLocal,
+        DateTime dateTimeUnspecified,
+        double doubleValue,
+        IntEnum enumValue,
+        IntFlags enumFlags,
+        Guid guid,
+        short int16,
+        int int32,
+        long int64,
+        nint pointer,
+        sbyte signedByte,
+        float single,
+        ushort uint16,
+        uint uint32,
+        ulong uint64
+    ) => WriteEvent(
+        11,
+        new object[] {
+            boolValue,
+            byteValue,
+            byteArray,
+            charValue,
+            dateTimeUtc,
+            dateTimeLocal,
+            dateTimeUnspecified,
+            doubleValue,
+            enumValue,
+            enumFlags,
+            guid,
+            int16,
+            int32,
+            int64,
+            pointer,
+            signedByte,
+            single,
+            uint16,
+            uint32,
+            uint64
+        });
 }

@@ -212,6 +212,236 @@ Describe "Register-PSEtwEvent" -Skip:(-not $IsAdmin) {
         }
     }
 
+    It "Filters using pipeline input" {
+        $eventInfo = New-PSEtwEventInfo -Provider PSEtw-Event -Level Error
+
+        $sourceId = [Guid]::NewGuid()
+        $registerOutput = $eventInfo | Register-PSEtwEvent -SourceIdentifier $sourceId
+        try {
+            $registerOutput | Should -BeNullOrEmpty
+
+            Invoke-WithTestEtwProvider -ScriptBlock {
+                $logger.LevelWarning(10)
+                $logger.LevelError(20)
+            }
+            # Ignore EventSource init events
+            while ($true) {
+                $actual = Wait-Event -SourceIdentifier $sourceId -Timeout 5
+                $actual | Should -Not -BeNullOrEmpty
+                $actual | Remove-Event
+
+                if ($actual.SourceEventArgs.Header.Descriptor.Id -gt 0) {
+                    break
+                }
+            }
+
+            $actual.SourceEventArgs.Header.Descriptor.Id | Should -Be 4
+            $actual.SourceEventArgs.Header.Descriptor.Level | Should -Be 2
+            $actual.SourceEventArgs.Info.Level | Should -Be Error
+            $actual.SourceEventArgs.Info.Properties[0].Name | Should -Be myId
+            $actual.SourceEventArgs.Info.Properties[0].Value | Should -Be 20
+        }
+        finally {
+            Unregister-Event -SourceIdentifier $sourceId
+        }
+    }
+
+    It "Parses multiple value types" {
+        $sourceId = [Guid]::NewGuid()
+        $registerOutput = Register-PSEtwEvent -Provider PSEtw-Event -SourceIdentifier $sourceId
+        try {
+            $registerOutput | Should -BeNullOrEmpty
+
+            Invoke-WithTestEtwProvider -ScriptBlock {
+                $logger.TypeTest(
+                    $true,
+                    [byte]128,
+                    [byte[]]@(0, 1, 2, 3),
+                    [char]1,
+                    [DateTime]::new(1970, 1, 1, 0, 0, 0, [DateTimeKind]::Utc),
+                    [DateTime]::new(1970, 1, 1, 0, 0, 0, [DateTimeKind]::Local),
+                    [DateTime]::new(1970, 1, 1, 0, 0, 0, [DateTimeKind]::Unspecified),
+                    [Double]'10.32',
+                    [PSEtwProvider.IntEnum]::Value2,
+                    [PSEtwProvider.IntFlags]'Value2, Value3',
+                    [Guid]"40fc67b6-6d25-45d5-b7ee-9ebc87ee247e",
+                    -1,
+                    -2,
+                    -3,
+                    [IntPtr]-4,
+                    -5,
+                    [float]'102.01',
+                    [UInt16]"32768",
+                    [UInt32]"2147483648",
+                    [UInt64]"9223372036854775808"
+                )
+            }
+            # Ignore EventSource init events
+            while ($true) {
+                $actual = Wait-Event -SourceIdentifier $sourceId -Timeout 5
+                $actual | Should -Not -BeNullOrEmpty
+                $actual | Remove-Event
+
+                if ($actual.SourceEventArgs.Header.Descriptor.Id -gt 0) {
+                    break
+                }
+            }
+
+            $actual.SourceEventArgs.Header.Descriptor.Id | Should -Be 11
+            $actual.SourceEventArgs.Info.Properties.Count | Should -Be 21
+
+            $prop = $actual.SourceEventArgs.Info.Properties[0]
+            $prop.Name | Should -Be boolValue
+            $prop.Value | Should -BeOfType ([bool])
+            $prop.Value | Should -BeTrue
+            $prop.DisplayValue | Should -Be true
+            $prop.ToString() | Should -Be boolValue=true
+
+            $prop = $actual.SourceEventArgs.Info.Properties[1]
+            $prop.Name | Should -Be byteValue
+            $prop.Value | Should -BeOfType ([byte])
+            $prop.Value | Should -Be 128
+            $prop.DisplayValue | Should -Be 128
+            $prop.ToString() | Should -Be byteValue=128
+
+            $prop = $actual.SourceEventArgs.Info.Properties[2]
+            $prop.Name | Should -Be byteArraySize
+            $prop.Value | Should -BeOfType ([UInt32])
+            $prop.Value | Should -Be 4
+            $prop.DisplayValue | Should -Be 4
+            $prop.ToString() | Should -Be byteArraySize=4
+
+            $prop = $actual.SourceEventArgs.Info.Properties[3]
+            $prop.Name | Should -Be byteArray
+            , $prop.Value | Should -BeOfType ([byte[]])
+            [Convert]::ToBase64String($prop.Value) | Should -Be "AAECAw=="
+            $prop.DisplayValue | Should -Be "0x00010203"
+            $prop.ToString() | Should -Be "byteArray=0x00010203"
+
+            $prop = $actual.SourceEventArgs.Info.Properties[4]
+            $prop.Name | Should -Be charValue
+            $prop.Value | Should -BeOfType ([UInt16])
+            $prop.Value | Should -Be ([UInt16]1)
+            $prop.DisplayValue | Should -Be 1
+            $prop.ToString() | Should -Be charValue=1
+
+            $prop = $actual.SourceEventArgs.Info.Properties[5]
+            $prop.Name | Should -Be dateTimeUtc
+            $prop.Value | Should -BeOfType ([DateTime])
+            $prop.Value | Should -Be ([DateTime]::new(1970, 1, 1, 0, 0, 0, [DateTimeKind]::Utc))
+            $prop.DisplayValue | Should -Be "$([char]0x200E)1970$([char]0x200E)-$([char]0x200E)01$([char]0x200E)-$([char]0x200E)01T00:00:00.000000000Z"
+            $prop.ToString() | Should -Be "dateTimeUtc=$([char]0x200E)1970$([char]0x200E)-$([char]0x200E)01$([char]0x200E)-$([char]0x200E)01T00:00:00.000000000Z"
+
+            $prop = $actual.SourceEventArgs.Info.Properties[6]
+            $prop.Name | Should -Be dateTimeLocal
+            $prop.Value | Should -BeOfType ([DateTime])
+            $prop.Value | Should -Be ([DateTime]::new(1970, 1, 1, 0, 0, 0, [DateTimeKind]::Utc))
+            $prop.DisplayValue | Should -Be "$([char]0x200E)1970$([char]0x200E)-$([char]0x200E)01$([char]0x200E)-$([char]0x200E)01T00:00:00.000000000Z"
+            $prop.ToString() | Should -Be "dateTimeLocal=$([char]0x200E)1970$([char]0x200E)-$([char]0x200E)01$([char]0x200E)-$([char]0x200E)01T00:00:00.000000000Z"
+
+            $prop = $actual.SourceEventArgs.Info.Properties[7]
+            $prop.Name | Should -Be dateTimeUnspecified
+            $prop.Value | Should -BeOfType ([DateTime])
+            $prop.Value | Should -Be ([DateTime]::new(1970, 1, 1, 0, 0, 0, [DateTimeKind]::Utc))
+            $prop.DisplayValue | Should -Be "$([char]0x200E)1970$([char]0x200E)-$([char]0x200E)01$([char]0x200E)-$([char]0x200E)01T00:00:00.000000000Z"
+            $prop.ToString() | Should -Be "dateTimeUnspecified=$([char]0x200E)1970$([char]0x200E)-$([char]0x200E)01$([char]0x200E)-$([char]0x200E)01T00:00:00.000000000Z"
+
+            $prop = $actual.SourceEventArgs.Info.Properties[8]
+            $prop.Name | Should -Be doubleValue
+            $prop.Value | Should -BeOfType ([double])
+            $prop.Value | Should -Be "10.32"
+            $prop.DisplayValue | Should -Be '10.320000'
+            $prop.ToString() | Should -Be "doubleValue=10.320000"
+
+            $prop = $actual.SourceEventArgs.Info.Properties[9]
+            $prop.Name | Should -Be enumValue
+            $prop.Value | Should -BeOfType ([uint])
+            $prop.Value | Should -Be 1
+            $prop.DisplayValue | Should -Be 'Value2 '
+            $prop.ToString() | Should -Be 'enumValue=Value2 '
+
+            $prop = $actual.SourceEventArgs.Info.Properties[10]
+            $prop.Name | Should -Be enumFlags
+            $prop.Value | Should -BeOfType ([uint])
+            $prop.Value | Should -Be 3
+            $prop.DisplayValue | Should -Be 'Value2 |Value3 '
+            $prop.ToString() | Should -Be 'enumFlags=Value2 |Value3 '
+
+            $prop = $actual.SourceEventArgs.Info.Properties[11]
+            $prop.Name | Should -Be guid
+            $prop.Value | Should -BeOfType ([guid])
+            $prop.Value | Should -Be 40fc67b6-6d25-45d5-b7ee-9ebc87ee247e
+            $prop.DisplayValue | Should -Be '{40fc67b6-6d25-45d5-b7ee-9ebc87ee247e}'
+            $prop.ToString() | Should -Be 'guid={40fc67b6-6d25-45d5-b7ee-9ebc87ee247e}'
+
+            $prop = $actual.SourceEventArgs.Info.Properties[12]
+            $prop.Name | Should -Be int16
+            $prop.Value | Should -BeOfType ([int16])
+            $prop.Value | Should -Be -1
+            $prop.DisplayValue | Should -Be -1
+            $prop.ToString() | Should -Be int16=-1
+
+            $prop = $actual.SourceEventArgs.Info.Properties[13]
+            $prop.Name | Should -Be int32
+            $prop.Value | Should -BeOfType ([int32])
+            $prop.Value | Should -Be -2
+            $prop.DisplayValue | Should -Be -2
+            $prop.ToString() | Should -Be int32=-2
+
+            $prop = $actual.SourceEventArgs.Info.Properties[14]
+            $prop.Name | Should -Be int64
+            $prop.Value | Should -BeOfType ([int64])
+            $prop.Value | Should -Be -3
+            $prop.DisplayValue | Should -Be -3
+            $prop.ToString() | Should -Be int64=-3
+
+            $prop = $actual.SourceEventArgs.Info.Properties[15]
+            $prop.Name | Should -Be pointer
+            $prop.Value | Should -BeOfType ([int64])
+            $prop.Value | Should -Be -4
+            $prop.DisplayValue | Should -Be 0xFFFFFFFFFFFFFFFC
+            $prop.ToString() | Should -Be pointer=0xFFFFFFFFFFFFFFFC
+
+            $prop = $actual.SourceEventArgs.Info.Properties[16]
+            $prop.Name | Should -Be signedByte
+            $prop.Value | Should -BeOfType ([sbyte])
+            $prop.Value | Should -Be -5
+            $prop.DisplayValue | Should -Be -5
+            $prop.ToString() | Should -Be signedByte=-5
+
+            $prop = $actual.SourceEventArgs.Info.Properties[17]
+            $prop.Name | Should -Be single
+            $prop.Value | Should -BeOfType ([float])
+            $prop.Value | Should -Be '102.01'
+            $prop.DisplayValue | Should -Be '102.010002'
+            $prop.ToString() | Should -Be single=102.010002
+
+            $prop = $actual.SourceEventArgs.Info.Properties[18]
+            $prop.Name | Should -Be uint16
+            $prop.Value | Should -BeOfType ([UInt16])
+            $prop.Value | Should -Be 32768
+            $prop.DisplayValue | Should -Be 32768
+            $prop.ToString() | Should -Be uint16=32768
+
+            $prop = $actual.SourceEventArgs.Info.Properties[19]
+            $prop.Name | Should -Be uint32
+            $prop.Value | Should -BeOfType ([UInt32])
+            $prop.Value | Should -Be 2147483648
+            $prop.DisplayValue | Should -Be 2147483648
+            $prop.ToString() | Should -Be uint32=2147483648
+
+            $prop = $actual.SourceEventArgs.Info.Properties[20]
+            $prop.Name | Should -Be uint64
+            $prop.Value | Should -BeOfType ([UInt64])
+            $prop.Value | Should -Be 9223372036854775808
+            $prop.DisplayValue | Should -Be 9223372036854775808
+            $prop.ToString() | Should -Be uint64=9223372036854775808
+        }
+        finally {
+            Unregister-Event -SourceIdentifier $sourceId
+        }
+    }
+
     It "Uses a custom ETW session" {
         $session = New-PSEtwSession -Name PSEtw-Temp
         try {
@@ -245,7 +475,16 @@ Describe "Register-PSEtwEvent" -Skip:(-not $IsAdmin) {
 
     It "Fails with Forward and Action set" {
         {
-            Register-PSEtwEvent -Provider PSEtw-Event -SourceIdentifier foo -Forward -Action {'foo'}
+            Register-PSEtwEvent -Provider PSEtw-Event -SourceIdentifier foo -Forward -Action { 'foo' }
         } | Should -Throw "The action is not supported when you are forwarding events."
+    }
+
+    It "Fails to open ETW Trace Session that does not exist" {
+        $expected = "Failed to open session 'Invalid', ensure it exists and the current user has permissions to open the session*"
+        $err = {
+            Register-PSEtwEvent -Provider PSEtw-Event -SourceIdentifier foo -SessionName Invalid
+        } | Should -Throw -PassThru
+
+        [string]$err | Should -BeLike $expected
     }
 }

@@ -80,6 +80,7 @@ public sealed class EtwEventArgs : EventArgs
             {
                 Span<Tdh.TRACE_EVENT_INFO> eventInfo = new((void*)buffer, 1);
                 EventInfo info = new(
+                    ref record,
                     ref eventInfo[0],
                     buffer,
                     GetPointerSize(record.EventHeader.Flags),
@@ -185,6 +186,7 @@ public sealed class EventInfo
     public EventPropertyInfo[] Properties { get; }
 
     internal EventInfo(
+        ref Advapi32.EVENT_RECORD record,
         ref Tdh.TRACE_EVENT_INFO info,
         nint buffer,
         int pointerSize,
@@ -203,6 +205,7 @@ public sealed class EventInfo
         EventName = EtwEventArgs.ReadPtrString(buffer, info.EventNameOffset);
         RelatedActivityIdName = EtwEventArgs.ReadPtrString(buffer, info.RelatedActivityIDNameOffset);
         Properties = ReadProperties(
+            ref record,
             ref info,
             buffer,
             info.TopLevelPropertyCount,
@@ -213,6 +216,7 @@ public sealed class EventInfo
     }
 
     private static EventPropertyInfo[] ReadProperties(
+        ref Advapi32.EVENT_RECORD record,
         ref Tdh.TRACE_EVENT_INFO info,
         nint buffer,
         int count,
@@ -244,6 +248,7 @@ public sealed class EventInfo
             for (int i = 0; i < count; i++)
             {
                 EventPropertyInfo prop = EventPropertyInfo.Create(
+                    ref record,
                     ref info,
                     properties,
                     buffer,
@@ -308,6 +313,7 @@ public sealed class EventPropertyInfo
     }
 
     internal static EventPropertyInfo Create(
+        ref Advapi32.EVENT_RECORD record,
         ref Tdh.TRACE_EVENT_INFO eventInfo,
         Span<Tdh.EVENT_PROPERTY_INFO> properties,
         nint buffer,
@@ -317,7 +323,7 @@ public sealed class EventPropertyInfo
         ReadOnlySpan<byte> userData,
         out int consumed)
     {
-        ref Tdh.EVENT_PROPERTY_INFO info = ref properties[0];
+        ref Tdh.EVENT_PROPERTY_INFO info = ref properties[index];
         string? name = EtwEventArgs.ReadPtrString(buffer, info.NameOffset);
 
         TdhInType inType = (TdhInType)info.InType;
@@ -337,53 +343,63 @@ public sealed class EventPropertyInfo
         bool isArray = arrayCount != 1 ||
             info.Flags.HasFlag(EventPropertyFlags.PropertyParamCount | EventPropertyFlags.PropertyParamFixedCount);
 
-        if (info.MapNameOffset != 0)
-        {
-            throw new NotImplementedException($"Property '{name}' has an associated map which is not implemented");
-        }
-
         List<object> values = new();
         List<string> displayValues = new();
         consumed = 0;
-        for (int i = 0; i < arrayCount; i++)
+        IntPtr mapNameBuffer = IntPtr.Zero;
+        try
         {
-            if (info.Flags.HasFlag(EventPropertyFlags.PropertyStruct))
-            {
-                throw new NotImplementedException($"Property '{name}' is a struct which is not implemented");
-            }
-            else if (info.Flags.HasFlag(EventPropertyFlags.PropertyHasCustomSchema))
-            {
-                throw new NotImplementedException($"Property '{name}' is a custom schema which is not implemented");
-            }
-            else
-            {
-                object outValue = TdhTypeReader.Transform(
-                    name,
-                    pointerSize,
-                    userData,
-                    propLength,
-                    inType,
-                    outType,
-                    out short? storeInteger);
+            mapNameBuffer = GetEventMapInformation(ref record, info.MapNameOffset, buffer);
 
-                string? displayValue = FormatProperty(
-                    ref eventInfo,
-                    pointerSize,
-                    propLength,
-                    inType,
-                    outType,
-                    userData,
-                    out short dataConsumed);
-
-                if (storeInteger != null && !isArray)
+            for (int i = 0; i < arrayCount; i++)
+            {
+                if (info.Flags.HasFlag(EventPropertyFlags.PropertyStruct))
                 {
-                    integerValues[index] = (short)storeInteger;
+                    throw new NotImplementedException($"Property '{name}' is a struct which is not implemented");
                 }
+                else if (info.Flags.HasFlag(EventPropertyFlags.PropertyHasCustomSchema))
+                {
+                    throw new NotImplementedException($"Property '{name}' is a custom schema which is not implemented");
+                }
+                else
+                {
+                    object outValue = TdhTypeReader.Transform(
+                        name,
+                        pointerSize,
+                        userData,
+                        propLength,
+                        inType,
+                        outType,
+                        out short? storeInteger);
 
-                userData = userData.Slice(dataConsumed);
-                consumed += dataConsumed;
-                displayValues.Add(displayValue ?? outValue.ToString() ?? "");
-                values.Add(outValue);
+                    string? displayValue = FormatProperty(
+                        ref eventInfo,
+                        mapNameBuffer,
+                        pointerSize,
+                        propLength,
+                        inType,
+                        outType,
+                        userData,
+                        out short dataConsumed);
+
+                    if (storeInteger != null && !isArray)
+                    {
+                        integerValues[index] = (short)storeInteger;
+                    }
+
+                    userData = userData.Slice(dataConsumed);
+                    consumed += dataConsumed;
+                    displayValues.Add(displayValue ?? outValue.ToString() ?? "");
+                    values.Add(outValue);
+                }
+            }
+
+        }
+        finally
+        {
+            if (mapNameBuffer != IntPtr.Zero)
+            {
+                Marshal.FreeHGlobal(mapNameBuffer);
             }
         }
 
@@ -400,6 +416,45 @@ public sealed class EventPropertyInfo
             string.Join(", ", displayValues),
             tags
         );
+    }
+
+    private static nint GetEventMapInformation(
+        ref Advapi32.EVENT_RECORD record,
+        int mapNameOffset,
+        nint buffer)
+    {
+        if (mapNameOffset == 0)
+        {
+            return IntPtr.Zero;
+        }
+
+        nint mapNamePtr = IntPtr.Add(buffer, mapNameOffset);
+        int mapNameSize = 0;
+        int mapNameRes = Tdh.TdhGetEventMapInformation(
+            ref record,
+            mapNamePtr,
+            IntPtr.Zero,
+            ref mapNameSize);
+
+        if (mapNameRes != 0 && mapNameRes != 122)  // ERROR_INSUFFICIENT_BUFFER
+        {
+            throw new Win32Exception(mapNameRes);
+        }
+
+        nint mapNameBuffer = Marshal.AllocHGlobal(mapNameSize);
+        mapNameRes = Tdh.TdhGetEventMapInformation(
+            ref record,
+            mapNamePtr,
+            mapNameBuffer,
+            ref mapNameSize);
+
+        if (mapNameRes != 0)
+        {
+            Marshal.FreeHGlobal(mapNameBuffer);
+            throw new Win32Exception(mapNameRes);
+        }
+
+        return mapNameBuffer;
     }
 
     private static short GetPropertyLength(
@@ -438,6 +493,7 @@ public sealed class EventPropertyInfo
 
     private static string? FormatProperty(
         ref Tdh.TRACE_EVENT_INFO info,
+        nint mapInfo,
         int pointerSize,
         short propertyLength,
         TdhInType inType,
@@ -457,7 +513,7 @@ public sealed class EventPropertyInfo
                     {
                         int res = Tdh.TdhFormatProperty(
                             ref info,
-                            IntPtr.Zero,  // mapInfo
+                            mapInfo,
                             pointerSize,
                             (short)inType,
                             (short)outType,

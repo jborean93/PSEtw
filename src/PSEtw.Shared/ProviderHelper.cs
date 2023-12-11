@@ -147,6 +147,12 @@ internal static class ProviderHelper
                     buffer,
                     ref bufferSize);
             }
+            else if (res == 0x00000490)  // ERROR_NOT_FOUND
+            {
+                // TraceLoggers won't have any fields defined, just present
+                // there are none.
+                return Array.Empty<ProviderFieldInfo>();
+            }
 
             if (res != 0)
             {
