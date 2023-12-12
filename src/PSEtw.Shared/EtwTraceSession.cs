@@ -2,13 +2,12 @@ using PSEtw.Shared.Native;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Runtime.InteropServices;
 
 namespace PSEtw.Shared;
 
 public sealed class EtwTraceSession : IDisposable
 {
-    private SafeEtwTraceSession _session;
+    internal SafeEtwTraceSession _session;
     private List<(Guid, byte, long, long)> _enabledTraces = new();
 
     public string Name { get; }
@@ -122,4 +121,22 @@ public sealed class EtwTraceSession : IDisposable
         _session?.Dispose();
     }
     ~EtwTraceSession() => Dispose(false);
+}
+
+public sealed class TraceSessionOrString
+{
+    internal EtwTraceSession? SessionValue { get; }
+    internal string? StringValue { get; }
+
+    public string Name => StringValue ?? SessionValue!.Name;
+
+    public TraceSessionOrString(EtwTraceSession value)
+    {
+        SessionValue = value;
+    }
+
+    public TraceSessionOrString(string value)
+    {
+        StringValue = value;
+    }
 }

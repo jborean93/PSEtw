@@ -78,6 +78,9 @@ $schema = New-YamlSchema -EmitTransformer {
             Value = $Value.ToString()
         }
     }
+    elseif ($Value -is [xml]) {
+        $Value.ToString()
+    }
     else {
         $Schema.EmitTransformer($Value)
     }
@@ -85,22 +88,30 @@ $schema = New-YamlSchema -EmitTransformer {
 
 Install-TestEtwProvider
 
+# $providerName = "PSEtw-Manifest"
+$providerName = "PSEtw-TraceLogger"
+
 $eventHandler = $sourceId = $null
 try {
-    $providerGuid = (New-PSEtwEventInfo -Provider PSEtw-Event).Provider
-    Write-Host "Provider Guid - $providerGuid"
+    $providerGuid = (New-PSEtwEventInfo -Provider $providerName).Provider
+    Write-Host "Provider $providerName Guid - $providerGuid"
 
-    Trace-PSEtwEvent -Provider PSEtw-Event -ErrorAction Continue | ForEach-Object {
+    Trace-PSEtwEvent -Provider $providerName -Level Verbose -ErrorAction Continue | ForEach-Object {
         $_ | ConvertTo-Yaml -Schema $schema -Depth 5 | Out-Host
         Write-Host ""
 
-        if ($_.Header.Descriptor.Id -eq 1) {
-            $_ | Stop-PSEtwTrace
-        }
+        # if ($_.Header.Descriptor.Id -eq 1) {
+        #     $_ | Stop-PSEtwTrace
+        # }
     }
 
+    # Trace-PSEtwEvent -Provider PowerShellCore -Level Info -KeywordsAny Runspace -ErrorAction Continue | ForEach-Object {
+    #     $_ | ConvertTo-Yaml -Schema $schema -Depth 5 | Out-Host
+    #     Write-Host ""
+    # }
+
     # $sourceId = [Guid]::NewGuid().Guid
-    # Register-PSEtwEvent -Provider PSEtw-Event -SourceIdentifier $sourceId
+    # Register-PSEtwEvent -Provider PSEtw-Manifest -SourceIdentifier $sourceId
 
     # Invoke-WithTestEtwProvider -ScriptBlock {
     #     $logger.LevelLogAlways(20)

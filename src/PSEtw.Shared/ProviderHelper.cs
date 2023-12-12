@@ -12,8 +12,8 @@ internal static class ProviderHelper
     {
         List<(Guid, string)> finalRes = new();
 
-        int bufferSize = 0;
-        nint buffer = IntPtr.Zero;
+        int bufferSize = 1024;
+        nint buffer = Marshal.AllocHGlobal(bufferSize);
         try
         {
             while (true)
@@ -21,12 +21,7 @@ internal static class ProviderHelper
                 int res = Tdh.TdhEnumerateProviders(buffer, ref bufferSize);
                 if (res == 0x0000007A)  // ERROR_INSUFFICIENT_BUFFER
                 {
-                    if (buffer != IntPtr.Zero)
-                    {
-                        Marshal.FreeHGlobal(buffer);
-                        buffer = IntPtr.Zero;
-                    }
-                    buffer = Marshal.AllocHGlobal(bufferSize);
+                    buffer = Marshal.ReAllocHGlobal(buffer, (nint)bufferSize);
                     continue;
                 }
                 else if (res != 0)
@@ -52,10 +47,7 @@ internal static class ProviderHelper
         }
         finally
         {
-            if (buffer != IntPtr.Zero)
-            {
-                Marshal.FreeHGlobal(buffer);
-            }
+            Marshal.FreeHGlobal(buffer);
         }
 
         return finalRes.ToArray();

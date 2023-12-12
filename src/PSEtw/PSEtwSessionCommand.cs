@@ -19,7 +19,7 @@ public abstract class PSEtwCommandBase : PSCmdlet
         ParameterSetName = DEFAULT_PARAM_SET
     )]
     [Alias("Name")]
-    public virtual string[] SessionName { get; set; } = Array.Empty<string>();
+    public virtual TraceSessionOrString[] SessionName { get; set; } = Array.Empty<TraceSessionOrString>();
 
     [Parameter(
         ParameterSetName = "Default"
@@ -28,17 +28,17 @@ public abstract class PSEtwCommandBase : PSCmdlet
 
     protected override void ProcessRecord()
     {
-        string[] names;
+        TraceSessionOrString[] names;
         if (Default)
         {
-            names = new[] { PSEtwGlobals.DEFAULT_SESSION_NAME };
+            names = new[] { new TraceSessionOrString(PSEtwGlobals.DEFAULT_SESSION_NAME) };
         }
         else
         {
             names = SessionName;
         }
 
-        foreach (string name in names)
+        foreach (TraceSessionOrString name in names)
         {
             try
             {
@@ -65,7 +65,7 @@ public abstract class PSEtwCommandBase : PSCmdlet
         }
     }
 
-    protected abstract void ProcessName(string name);
+    protected abstract void ProcessName(TraceSessionOrString name);
 }
 
 [Cmdlet(VerbsCommon.New, "PSEtwSession", SupportsShouldProcess = true, DefaultParameterSetName = DEFAULT_PARAM_SET)]
@@ -77,17 +77,17 @@ public sealed class NewPSEtwCommand : PSEtwCommandBase
     )]
     public SwitchParameter SystemLogger { get; set; }
 
-    protected override void ProcessName(string name)
+    protected override void ProcessName(TraceSessionOrString name)
     {
-        if (ShouldProcess(name, "create"))
+        if (ShouldProcess(name.Name, "create"))
         {
             bool isSystemLogger = SystemLogger;
-            if (string.Equals(name, PSEtwGlobals.DEFAULT_SESSION_NAME, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(name.Name, PSEtwGlobals.DEFAULT_SESSION_NAME, StringComparison.OrdinalIgnoreCase))
             {
                 isSystemLogger = true;
             }
 
-            WriteObject(EtwTraceSession.Create(name, isSystemLogger: isSystemLogger));
+            WriteObject(EtwTraceSession.Create(name.Name, isSystemLogger: isSystemLogger));
         }
     }
 }
@@ -104,18 +104,26 @@ public sealed class RemovePSEtwCommand : PSEtwCommandBase
     )]
     [Alias("Name")]
     [ArgumentCompleter(typeof(SessionNameCompletor))]
-    public override string[] SessionName { get; set; } = Array.Empty<string>();
+    public override TraceSessionOrString[] SessionName { get; set; } = Array.Empty<TraceSessionOrString>();
 
-    protected override void ProcessName(string name)
+    protected override void ProcessName(TraceSessionOrString name)
     {
-        if (ShouldProcess(name, "remove"))
+        if (ShouldProcess(name.Name, "remove"))
         {
-            if (string.Equals(name, PSEtwGlobals.DEFAULT_SESSION_NAME, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(name.Name, PSEtwGlobals.DEFAULT_SESSION_NAME, StringComparison.OrdinalIgnoreCase))
             {
                 PSEtwGlobals.RemoveDefaultSession();
             }
 
-            EtwApi.RemoveTraceSession(name);
+            if (name.SessionValue is EtwTraceSession session)
+            {
+                EtwApi.RemoveTraceSession(session._session);
+                session.Dispose();
+            }
+            else
+            {
+                EtwApi.RemoveTraceSession(name.Name);
+            }
         }
     }
 }
@@ -130,8 +138,8 @@ public sealed class TestPSEtwSessionCommand : PSEtwCommandBase
     {
         _allSessions = ProviderHelper.QueryAllTraces().ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
-    protected override void ProcessName(string name)
+    protected override void ProcessName(TraceSessionOrString name)
     {
-        WriteObject(_allSessions.Contains(name));
+        WriteObject(_allSessions.Contains(name.Name));
     }
 }

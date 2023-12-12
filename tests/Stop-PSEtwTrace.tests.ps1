@@ -17,7 +17,7 @@ Describe "Stop-PSEtwTrace" -Skip:(-not $IsAdmin) {
         $iss.ImportPSModulesFromPath($global:ModuleManifest)
         $ps = [PowerShell]::Create($iss)
         [void]$ps.AddScript({
-                Trace-PSEtwEvent -Provider PSEtw-Event | ForEach-Object {
+                Trace-PSEtwEvent -Provider PSEtw-Manifest | ForEach-Object {
                     if ($_.Header.Descriptor.Id -gt 0) {
                         $_
                         $_ | Stop-PSEtwTrace
@@ -44,7 +44,7 @@ Describe "Stop-PSEtwTrace" -Skip:(-not $IsAdmin) {
 
     It "Ignores events with no cancel token" {
         $sourceId = [Guid]::NewGuid()
-        $registerOutput = Register-PSEtwEvent -Provider PSEtw-Event -SourceIdentifier $sourceId
+        $registerOutput = Register-PSEtwEvent -Provider PSEtw-Manifest -SourceIdentifier $sourceId
         try {
             $registerOutput | Should -BeNullOrEmpty
 
@@ -79,7 +79,7 @@ Describe "Stop-PSEtwTrace" -Skip:(-not $IsAdmin) {
         $iss.ImportPSModulesFromPath($global:ModuleManifest)
         $ps = [PowerShell]::Create($iss)
         [void]$ps.AddScript({
-                Trace-PSEtwEvent -Provider PSEtw-Event | ForEach-Object {
+                Trace-PSEtwEvent -Provider PSEtw-Manifest | ForEach-Object {
                     if ($_.Header.Descriptor.Id -gt 0) {
                         $_
                         $_ | Stop-PSEtwTrace

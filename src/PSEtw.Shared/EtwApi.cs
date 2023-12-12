@@ -62,6 +62,23 @@ internal static class EtwApi
         ControlTraceByName(name, EventTraceControl.EVENT_TRACE_CONTROL_STOP).Dispose();
     }
 
+    public static void RemoveTraceSession(SafeEtwTraceSession session)
+    {
+        unsafe
+        {
+            int res = Advapi32.ControlTraceW(
+                session.DangerousGetTraceHandle(),
+                null,
+                session.DangerousGetHandle(),
+                EventTraceControl.EVENT_TRACE_CONTROL_STOP);
+
+            if (res != 0)
+            {
+                throw new Win32Exception(res);
+            }
+        }
+    }
+
     public static void EnableTrace(
         SafeEtwTraceSession session,
         Guid providerId,
@@ -209,7 +226,7 @@ internal sealed class SafeEtwTraceSession : SafeHandle
         _sessionHandle = handle;
     }
 
-    public override bool IsInvalid => _sessionHandle != 0 || handle != IntPtr.Zero;
+    public override bool IsInvalid => _sessionHandle == 0 || handle == IntPtr.Zero;
 
     internal long DangerousGetTraceHandle() => _sessionHandle;
 

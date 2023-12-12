@@ -2,6 +2,7 @@ using PSEtw.Shared.Native;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 
@@ -29,23 +30,15 @@ public sealed class EtwEventArgs : EventArgs
     {
         EventHeader header = new(ref record.EventHeader);
 
-        if (record.EventHeader.Flags.HasFlag(HeaderFlags.EVENT_HEADER_FLAG_TRACE_MESSAGE))
+        if (
+            record.EventHeader.Flags.HasFlag(HeaderFlags.EVENT_HEADER_FLAG_TRACE_MESSAGE) ||
+            record.EventHeader.Flags.HasFlag(HeaderFlags.EVENT_HEADER_FLAG_CLASSIC_HEADER) ||
+            record.EventHeader.Flags.HasFlag(HeaderFlags.EVENT_HEADER_FLAG_STRING_ONLY)
+        )
         {
             // FIXME: Find a WPP event to test with
-            throw new Win32Exception(0x000000A0);  // ERROR_BAD_ARGUMENTS
-        }
-        else if (record.EventHeader.Flags.HasFlag(HeaderFlags.EVENT_HEADER_FLAG_CLASSIC_HEADER))
-        {
-            // FIXME: Find a WPP event to test with
-            throw new Win32Exception(0x000000A0);  // ERROR_BAD_ARGUMENTS
-        }
-        else if (record.EventHeader.Flags.HasFlag(HeaderFlags.EVENT_HEADER_FLAG_STRING_ONLY))
-        {
-            string? userData = ReadPtrString(
-                record.UserData,
-                0,
-                length: record.UserDataLength / 2);
-            throw new Win32Exception(0x000000A0);  // ERROR_BAD_ARGUMENTS
+            throw new NotImplementedException(
+                $"Support for event with flags {record.EventHeader.Flags} has not been implemented");
         }
 
         int bufferSize = 0;
@@ -112,7 +105,7 @@ public sealed class EtwEventArgs : EventArgs
         }
     }
 
-    internal static string? ReadPtrString(nint buffer, int offset, int length = 0, bool noTrim = false)
+    internal static string? ReadPtrString(nint buffer, int offset, int length = 0)
     {
         if (offset == 0)
         {
@@ -124,7 +117,7 @@ public sealed class EtwEventArgs : EventArgs
         string? value = length > 0 ? Marshal.PtrToStringUni(ptr, length) : Marshal.PtrToStringUni(ptr);
 
         // Some event entries end with a space so we strip that.
-        return noTrim ? value : value?.TrimEnd(' ');
+        return value?.TrimEnd(' ');
     }
 }
 
@@ -179,6 +172,7 @@ public sealed class EventInfo
     public string[] Keywords { get; }
     public string? Task { get; }
     public string? OpCode { get; }
+    public string? RawEventMessage { get; }
     public string? EventMessage { get; }
     public string? ProviderMessage { get; }
     public string? EventName { get; }
@@ -200,7 +194,7 @@ public sealed class EventInfo
         Keywords = ReadPtrStringList(buffer, info.KeywordsNameOffset);
         Task = EtwEventArgs.ReadPtrString(buffer, info.TaskNameOffset);
         OpCode = EtwEventArgs.ReadPtrString(buffer, info.OpcodeNameOffset);
-        EventMessage = EtwEventArgs.ReadPtrString(buffer, info.EventMessageOffset);
+        RawEventMessage = EtwEventArgs.ReadPtrString(buffer, info.EventMessageOffset);
         ProviderMessage = EtwEventArgs.ReadPtrString(buffer, info.ProviderMessageOffset);
         EventName = EtwEventArgs.ReadPtrString(buffer, info.EventNameOffset);
         RelatedActivityIdName = EtwEventArgs.ReadPtrString(buffer, info.RelatedActivityIDNameOffset);
@@ -213,14 +207,62 @@ public sealed class EventInfo
             pointerSize,
             userData,
             userDataLength);
+
+        if (info.EventMessageOffset > 0)
+        {
+            string[] replacements = Properties.Select(v => v.DisplayValue).ToArray();
+            EventMessage = FormatMessage(IntPtr.Add(buffer, info.EventMessageOffset), replacements);
+        }
+        else
+        {
+            EventMessage = RawEventMessage;
+        }
     }
 
-    private static EventPropertyInfo[] ReadProperties(
+    private static string FormatMessage(nint source, string[] replacements)
+    {
+        int flags = (int)(
+            FormatMessageFlags.FORMAT_MESSAGE_ALLOCATE_BUFFER |
+            FormatMessageFlags.FORMAT_MESSAGE_FROM_STRING |
+            FormatMessageFlags.FORMAT_MESSAGE_ARGUMENT_ARRAY
+        );
+
+        nint buffer = IntPtr.Zero;
+        try
+        {
+            int count = Kernel32.FormatMessageW(
+                flags,
+                source,
+                0,
+                0,
+                ref buffer,
+                0,
+                replacements);
+
+            if (count == 0)
+            {
+                throw new Win32Exception();
+            }
+
+            // FormatMessage seems to add a space, we shouldn't care about
+            // any trailing spaces to we trim it.
+            return Marshal.PtrToStringUni(buffer, count).TrimEnd();
+        }
+        finally
+        {
+            if (buffer != IntPtr.Zero)
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+    }
+
+    internal static EventPropertyInfo[] ReadProperties(
         ref Advapi32.EVENT_RECORD record,
         ref Tdh.TRACE_EVENT_INFO info,
         nint buffer,
+        int topLevelCount,
         int count,
-        int totalCount,
         int pointerSize,
         nint userData,
         short userDataLength)
@@ -243,9 +285,9 @@ public sealed class EventInfo
             // Properties can refer back to previous ones to retrieve integer
             // values needed for things like the data/array count. The count
             // and length values are always 16 bits in length.
-            Span<short> integerValues = stackalloc short[totalCount];
+            Span<short> integerValues = stackalloc short[count];
 
-            for (int i = 0; i < count; i++)
+            for (int i = 0; i < topLevelCount; i++)
             {
                 EventPropertyInfo prop = EventPropertyInfo.Create(
                     ref record,
@@ -353,13 +395,34 @@ public sealed class EventPropertyInfo
 
             for (int i = 0; i < arrayCount; i++)
             {
-                if (info.Flags.HasFlag(EventPropertyFlags.PropertyStruct))
-                {
-                    throw new NotImplementedException($"Property '{name}' is a struct which is not implemented");
-                }
-                else if (info.Flags.HasFlag(EventPropertyFlags.PropertyHasCustomSchema))
+                if (info.Flags.HasFlag(EventPropertyFlags.PropertyHasCustomSchema))
                 {
                     throw new NotImplementedException($"Property '{name}' is a custom schema which is not implemented");
+                }
+                else if (info.Flags.HasFlag(EventPropertyFlags.PropertyStruct))
+                {
+                    List<EventPropertyInfo> structProps = new();
+
+                    for (int j = info.InType; j < info.InType + info.OutType; j++)
+                    {
+                        EventPropertyInfo prop = Create(
+                            ref record,
+                            ref eventInfo,
+                            properties,
+                            buffer,
+                            j,
+                            integerValues,
+                            pointerSize,
+                            userData,
+                            out int structConsumed);
+                        structProps.Add(prop);
+
+                        userData = userData.Slice(structConsumed);
+                        consumed += structConsumed;
+                    }
+
+                    displayValues.Add(string.Join(", ", structProps));
+                    values.Add(structProps);
                 }
                 else
                 {
@@ -393,7 +456,6 @@ public sealed class EventPropertyInfo
                     values.Add(outValue);
                 }
             }
-
         }
         finally
         {

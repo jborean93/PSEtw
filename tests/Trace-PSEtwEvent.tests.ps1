@@ -4,7 +4,7 @@ Describe "Trace-PSEtwEvent" -Skip:(-not $IsAdmin) {
     BeforeAll {
         Install-TestEtwProvider
 
-        $providerGuid = (New-PSEtwEventInfo -Provider PSEtw-Event).Provider
+        $providerGuid = (New-PSEtwEventInfo -Provider PSEtw-Manifest).Provider
     }
 
     AfterAll {
@@ -19,7 +19,7 @@ Describe "Trace-PSEtwEvent" -Skip:(-not $IsAdmin) {
         $iss.ImportPSModulesFromPath($global:ModuleManifest)
         $ps = [PowerShell]::Create($iss)
         [void]$ps.AddScript({
-                Trace-PSEtwEvent -Provider PSEtw-Event | ForEach-Object {
+                Trace-PSEtwEvent -Provider PSEtw-Manifest | ForEach-Object {
                     if ($_.Header.Descriptor.Id -gt 0) {
                         $_
                         $_ | Stop-PSEtwTrace
@@ -63,12 +63,13 @@ Describe "Trace-PSEtwEvent" -Skip:(-not $IsAdmin) {
         $info = $actual.Info
         $info | Should -BeOfType ([PSEtw.Shared.EventInfo])
         $info.EventGuid | Should -BeOfType ([guid])
-        $info.Provider | Should -Be PSEtw-Event
+        $info.Provider | Should -Be PSEtw-Manifest
         $info.Level | Should -Be Information
         $info.Channel | Should -BeNullOrEmpty
         $info.Keywords | Should -BeNullOrEmpty
         $info.Task | Should -Be BasicEvent
         $info.OpCode | Should -BeNullOrEmpty
+        $info.RawEventMessage | Should -BeNullOrEmpty
         $info.EventMessage | Should -BeNullOrEmpty
         $info.ProviderMessage | Should -BeNullOrEmpty
         $info.EventName | Should -BeNullOrEmpty
@@ -87,7 +88,7 @@ Describe "Trace-PSEtwEvent" -Skip:(-not $IsAdmin) {
         $iss.ImportPSModulesFromPath($global:ModuleManifest)
         $ps = [PowerShell]::Create($iss)
         [void]$ps.AddScript({
-                Trace-PSEtwEvent -Provider PSEtw-Event -Level Error | ForEach-Object {
+                Trace-PSEtwEvent -Provider PSEtw-Manifest -Level Error | ForEach-Object {
                     if ($_.Header.Descriptor.Id -gt 0) {
                         $_
                         $_ | Stop-PSEtwTrace
@@ -121,7 +122,7 @@ Describe "Trace-PSEtwEvent" -Skip:(-not $IsAdmin) {
         $iss.ImportPSModulesFromPath($global:ModuleManifest)
         $ps = [PowerShell]::Create($iss)
         [void]$ps.AddScript({
-                Trace-PSEtwEvent -Provider PSEtw-Event -KeywordsAny Bar | ForEach-Object {
+                Trace-PSEtwEvent -Provider PSEtw-Manifest -KeywordsAny Bar | ForEach-Object {
                     if ($_.Header.Descriptor.Id -gt 0) {
                         $_
                         $_ | Stop-PSEtwTrace
@@ -156,7 +157,7 @@ Describe "Trace-PSEtwEvent" -Skip:(-not $IsAdmin) {
         $iss.ImportPSModulesFromPath($global:ModuleManifest)
         $ps = [PowerShell]::Create($iss)
         [void]$ps.AddScript({
-                Trace-PSEtwEvent -Provider PSEtw-Event -KeywordsAll Foo, Bar | ForEach-Object {
+                Trace-PSEtwEvent -Provider PSEtw-Manifest -KeywordsAll Foo, Bar | ForEach-Object {
                     if ($_.Header.Descriptor.Id -gt 0) {
                         $_
                         $_ | Stop-PSEtwTrace
@@ -192,7 +193,7 @@ Describe "Trace-PSEtwEvent" -Skip:(-not $IsAdmin) {
         $iss.ImportPSModulesFromPath($global:ModuleManifest)
         $ps = [PowerShell]::Create($iss)
         [void]$ps.AddScript({
-                $eventInfo = New-PSEtwEventInfo -Provider PSEtw-Event -Level Error
+                $eventInfo = New-PSEtwEventInfo -Provider PSEtw-Manifest -Level Error
                 $eventInfo | Trace-PSEtwEvent | ForEach-Object {
                     if ($_.Header.Descriptor.Id -gt 0) {
                         $_
@@ -229,7 +230,7 @@ Describe "Trace-PSEtwEvent" -Skip:(-not $IsAdmin) {
             $iss.ImportPSModulesFromPath($global:ModuleManifest)
             $ps = [PowerShell]::Create($iss)
             [void]$ps.AddScript({
-                    Trace-PSEtwEvent -Provider PSEtw-Event -SessionName $args[0] | ForEach-Object {
+                    Trace-PSEtwEvent -Provider PSEtw-Manifest -SessionName $args[0] | ForEach-Object {
                         if ($_.Header.Descriptor.Id -gt 0) {
                             $_
                             $_ | Stop-PSEtwTrace
@@ -256,10 +257,77 @@ Describe "Trace-PSEtwEvent" -Skip:(-not $IsAdmin) {
         }
     }
 
+    It "Emits any errors during a trace session" {
+        $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault2()
+        $iss.ImportPSModulesFromPath($global:ModuleManifest)
+        $ps = [PowerShell]::Create($iss)
+        [void]$ps.AddScript({
+                Trace-PSEtwEvent -Provider PSEtw-TraceLogger | ForEach-Object {
+                    $_
+                    $_ | Stop-PSEtwTrace
+                }
+            })
+        $task = $ps.BeginInvoke()
+
+        Invoke-WithTestEtwProvider -TraceLogger -ScriptBlock {
+            # We expect this to be an error as it's not valid XML
+            $eb = [Microsoft.TraceLoggingDynamic.EventBuilder]::new()
+            $eb.Reset("MyFailedEvent1", [Microsoft.TraceLoggingDynamic.EventLevel]::Info, 1, 0)
+
+            $eb.AddUnicodeString(
+                "AddUnicodeStringAsXml",
+                "invalid xml",
+                [Microsoft.TraceLoggingDynamic.EventOutType]::Xml,
+                0)
+            $null = $logger.Write($eb)
+
+            # This should also be an error as it's an invalid input/output combination
+            $eb = [Microsoft.TraceLoggingDynamic.EventBuilder]::new()
+            $eb.Reset("MyFailedEvent2", [Microsoft.TraceLoggingDynamic.EventLevel]::Info, 1, 0)
+
+            $eb.AddBinary(
+                "AddBinaryAsString",
+                [byte[]]@(0, 1, 2, 3),
+                [Microsoft.TraceLoggingDynamic.EventOutType]::String,
+                0)
+            $null = $logger.Write($eb)
+
+            # This should still be reported
+            $eb = [Microsoft.TraceLoggingDynamic.EventBuilder]::new()
+            $eb.Reset("MyGoodEvent", [Microsoft.TraceLoggingDynamic.EventLevel]::Info, 1, 0)
+
+            $eb.AddUnicodeString(
+                "UnicodeString",
+                "value",
+                [Microsoft.TraceLoggingDynamic.EventOutType]::Default,
+                10)
+            $null = $logger.Write($eb)
+        }
+
+        $actual = $ps.EndInvoke($task)
+
+        $actual.Header.Descriptor.Id | Should -Be 0
+        $actual.Info.EventName | Should -Be MyGoodEvent
+        $actual.Info.Properties[0].Name | Should -Be UnicodeString
+        $actual.Info.Properties[0].Value | Should -Be value
+        $actual.Info.Properties[0].Tags | Should -Be 10
+
+        $ps.Streams.Error.Count | Should -Be 2
+        [string]$ps.Streams.Error[0] | Should -Be "Unhandled exception in trace callback: Data at the root level is invalid. Line 1, position 1."
+        [string]$ps.Streams.Error[1] | Should -Be "Unhandled exception in trace callback: No valid transformations of TdhTypeReader to ValueTransformer for 'AddBinaryAsString'"
+    }
+
+    It "Errors on invalid trace input" {
+        $actual = Trace-PSEtwEvent -Provider PSEtw-Manifest -Level Foo -ErrorAction SilentlyContinue -ErrorVariable err
+        $actual | Should -BeNullOrEmpty
+        $err.Count | Should -Be 1
+        [string]$err | Should -Be "Unknown provider level 'Foo'"
+    }
+
     It "Fails to open ETW Trace Session that does not exist" {
         $expected = "Failed to open session 'Invalid', ensure it exists and the current user has permissions to open the session*"
         $err = {
-            Trace-PSEtwEvent -Provider PSEtw-Event -SessionName Invalid
+            Trace-PSEtwEvent -Provider PSEtw-Manifest -SessionName Invalid
         } | Should -Throw -PassThru
 
         [string]$err | Should -BeLike $expected

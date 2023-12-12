@@ -22,8 +22,8 @@ public enum IntFlags
     Value5 = 8
 }
 
-[EventSource(Name = "PSEtw-Event")]
-public sealed class PSEtwEvent : EventSource
+[EventSource(Name = "PSEtw-Manifest")]
+public sealed class PSEtwManifest : EventSource
 {
     public class Keywords
     {
@@ -117,4 +117,8 @@ public sealed class PSEtwEvent : EventSource
             uint32,
             uint64
         });
+
+    [Event(12, Message = "Event Message '{0}', '{1}', '{2}'")]
+    public void StringTest(string arg1, string arg2, string arg3)
+        => WriteEvent(12, arg1, arg2, arg3);
 }

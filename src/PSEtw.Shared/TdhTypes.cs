@@ -2,11 +2,13 @@ using PSEtw.Shared.Native;
 using System;
 using System.Buffers.Binary;
 using System.Globalization;
+using System.IO;
 using System.Net;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
 using System.Security.Principal;
 using System.Text;
+using System.Xml;
 
 namespace PSEtw.Shared;
 
@@ -244,10 +246,10 @@ internal class TdhTypeReader
         TdhOutType.TDH_OUTTYPE_PORT => ValueTransformerPort,
         TdhOutType.TDH_OUTTYPE_IPV4 => ValueTransformerIPAddress,
         TdhOutType.TDH_OUTTYPE_IPV6 => ValueTransformerIPAddress,
-        // TdhOutType.TDH_OUTTYPE_SOCKETADDRESS => ValueTransformer,
+        TdhOutType.TDH_OUTTYPE_SOCKETADDRESS => ValueTransformerSocketAddress,
         // TdhOutType.TDH_OUTTYPE_CIMDATETIME => ValueTransformer,
         // TdhOutType.TDH_OUTTYPE_ETWTIME => ValueTransformer,
-        // TdhOutType.TDH_OUTTYPE_XML => ValueTransformer,
+        TdhOutType.TDH_OUTTYPE_XML => ValueTransformerXml,
         TdhOutType.TDH_OUTTYPE_ERRORCODE => ValueTransformerInt,
         TdhOutType.TDH_OUTTYPE_WIN32ERROR => ValueTransformerInt,
         TdhOutType.TDH_OUTTYPE_NTSTATUS => ValueTransformerInt,
@@ -475,6 +477,37 @@ internal class TdhTypeReader
         return new IPAddress(raw.ToArray());
 #endif
     }
+
+    private static object? ValueTransformerSocketAddress(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length)
+    {
+        ReadOnlySpan<byte> raw = GetBytes(reader, data, length);
+        AddressFamily family = (AddressFamily)BinaryPrimitives.ReadInt16LittleEndian(raw);
+
+        SocketAddress addr = new(family, raw.Length);
+        for (int i = 0; i < raw.Length; i++)
+        {
+            addr[i] = raw[i];
+        }
+
+        return addr;
+    }
+
+    private static object? ValueTransformerXml(
+        TdhTypeReader reader,
+        ReadOnlySpan<byte> data,
+        short length)
+    {
+        XmlDocument xmlDoc = new();
+
+        ReadOnlySpan<byte> raw = GetBytes(reader, data, length);
+        using MemoryStream ms = new(raw.ToArray());
+        xmlDoc.Load(ms);
+
+        return xmlDoc;
+    }
 }
 
 internal interface ITdhStringReader
@@ -496,13 +529,7 @@ internal class TdhNullTerminatedStringReader : TdhTypeReader, ITdhStringReader
 
     private ReadOnlySpan<byte> GetBytes(ReadOnlySpan<byte> data, int length, Encoding encoding)
     {
-        // int charSize = encoding.GetByteCount(new[] { (char)0 });
         Span<byte> nullTerminator = encoding.GetBytes(new[] { (char)0 });
-
-        if (length > 0)
-        {
-            return data.Slice(0, length * nullTerminator.Length);
-        }
 
         int nullIdx = data.IndexOf(nullTerminator);
         if (nullIdx == -1)
@@ -511,8 +538,11 @@ internal class TdhNullTerminatedStringReader : TdhTypeReader, ITdhStringReader
         }
         else
         {
-            // We don't want to include the null terminator in the final bytes.
-            return data.Slice(0, nullIdx - 1);
+            // For UTF-16 and other encodings where ASCII chars are multiple
+            // bytes we need to align the length to the encoding size offset.
+            // E.g. nullIdx = 3 needs to become 4 when using Unicode.
+            int finalLength = nullIdx + (nullIdx % nullTerminator.Length);
+            return data.Slice(0, finalLength);
         }
     }
 
@@ -528,8 +558,6 @@ internal class TdhNullTerminatedStringReader : TdhTypeReader, ITdhStringReader
 internal class TdhFixedLengthReader : TdhTypeReader, ITdhStringReader
 {
     private int _size;
-
-    public Encoding StringEncoding => _size == 1 ? ANSIEncoding : Encoding.Unicode;
 
     internal TdhFixedLengthReader(int size)
     {
@@ -600,16 +628,19 @@ internal class TdhCountedLengthReader : TdhTypeReader, ITdhStringReader
         int size = 2;
         if (_lengthIsShort)
         {
-            size = 4;
-            length = BinaryPrimitives.ReadInt32BigEndian(data);
-        }
-        else if (_littleEndian)
-        {
-            length = BinaryPrimitives.ReadUInt16LittleEndian(data);
+            if (_littleEndian)
+            {
+                length = BinaryPrimitives.ReadUInt16LittleEndian(data);
+            }
+            else
+            {
+                length = BinaryPrimitives.ReadUInt16BigEndian(data);
+            }
         }
         else
         {
-            length = BinaryPrimitives.ReadUInt16BigEndian(data);
+            size = 4;
+            length = BinaryPrimitives.ReadInt32BigEndian(data);
         }
 
         return data.Slice(size, length);
@@ -635,7 +666,7 @@ internal class TdhSecurityIdentifierReader : TdhTypeReader, ITdhStringReader
     }
 
 #if NET6_0_OR_GREATER
-    [SupportedOSPlatform("windows")]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
 #endif
     public string GetString(ReadOnlySpan<byte> data, int length, Encoding? encoding)
     {

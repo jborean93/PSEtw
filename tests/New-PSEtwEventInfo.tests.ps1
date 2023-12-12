@@ -15,11 +15,11 @@ Describe "New-PSEtwEventInfo" -Skip:(-not $IsAdmin) {
 
     Context "Value Validation" {
         BeforeAll {
-            $providerGuid = (New-PSEtwEventInfo -Provider PSEtw-Event).Provider
+            $providerGuid = (New-PSEtwEventInfo -Provider PSEtw-Manifest).Provider
         }
 
         It "Accepts Provider as string" {
-            $actual = New-PSEtwEventInfo -Provider PSEtw-Event
+            $actual = New-PSEtwEventInfo -Provider PSEtw-Manifest
             $actual.Provider | Should -Be $providerGuid
         }
 
@@ -33,6 +33,11 @@ Describe "New-PSEtwEventInfo" -Skip:(-not $IsAdmin) {
             $actual.Provider | Should -Be $providerGuid
         }
 
+        It "Accepts any provider string" {
+            $actual = New-PSEtwEventInfo -Provider MyTestProvider
+            $actual.Provider | Should -Be 2af75877-0094-5988-223f-8f90620c458d
+        }
+
         It "Accepts <Param> as string" -TestCases @(
             @{ Param = "KeywordsAll" }
             @{ Param = "KeywordsAny" }
@@ -42,7 +47,7 @@ Describe "New-PSEtwEventInfo" -Skip:(-not $IsAdmin) {
             $splat = @{
                 "$Param" = "Foo"
             }
-            $actual = New-PSEtwEventInfo -Provider PSEtw-Event @splat
+            $actual = New-PSEtwEventInfo -Provider PSEtw-Manifest @splat
             $actual.$Param | Should -Be 1
         }
 
@@ -55,8 +60,21 @@ Describe "New-PSEtwEventInfo" -Skip:(-not $IsAdmin) {
             $splat = @{
                 "$Param" = "0xFFFFFFFF"
             }
-            $actual = New-PSEtwEventInfo -Provider PSEtw-Event @splat
+            $actual = New-PSEtwEventInfo -Provider PSEtw-Manifest @splat
             $actual.$Param | Should -Be ([Int64]"0xFFFFFFFF")
+        }
+
+        It "Accepts <Param> as long value" -TestCases @(
+            @{ Param = "KeywordsAll" }
+            @{ Param = "KeywordsAny" }
+        ) {
+            param ($Param)
+
+            $splat = @{
+                "$Param" = [Int64]-1
+            }
+            $actual = New-PSEtwEventInfo -Provider PSEtw-Manifest @splat
+            $actual.$Param | Should -Be ([Int64]"0xFFFFFFFFFFFFFFFF")
         }
 
         It "Accepts <Param> as wildcard string" -TestCases @(
@@ -68,7 +86,7 @@ Describe "New-PSEtwEventInfo" -Skip:(-not $IsAdmin) {
             $splat = @{
                 "$Param" = "*"
             }
-            $actual = New-PSEtwEventInfo -Provider PSEtw-Event @splat
+            $actual = New-PSEtwEventInfo -Provider PSEtw-Manifest @splat
             $actual.$Param | Should -Be 0xFFFFFFFFFFFFFFFF
         }
 
@@ -81,7 +99,7 @@ Describe "New-PSEtwEventInfo" -Skip:(-not $IsAdmin) {
             $splat = @{
                 "$Param" = 1
             }
-            $actual = New-PSEtwEventInfo -Provider PSEtw-Event @splat
+            $actual = New-PSEtwEventInfo -Provider PSEtw-Manifest @splat
             $actual.$Param | Should -Be 1
         }
 
@@ -89,11 +107,32 @@ Describe "New-PSEtwEventInfo" -Skip:(-not $IsAdmin) {
             @{ Param = "KeywordsAll" }
             @{ Param = "KeywordsAny" }
         ) {
+            param ($Param)
+
             $splat = @{
                 "$Param" = 526
             }
-            $actual = New-PSEtwEventInfo -Provider PSEtw-Event @splat
+            $actual = New-PSEtwEventInfo -Provider PSEtw-Manifest @splat
             $actual.$Param | Should -Be 526
+        }
+
+        It "Fails with <Param> with invalid string value" -TestCases @(
+            @{ Param = "KeywordsAll" }
+            @{ Param = "KeywordsAny" }
+        ) {
+            param ($Param)
+
+            $splat = @{
+                Provider = 'PSEtw-Manifest'
+                "$Param" = 'Invalid'
+                ErrorAction = 'SilentlyContinue'
+                ErrorVariable = 'err'
+            }
+            $actual = New-PSEtwEventInfo @splat
+            $actual | Should -BeNullOrEmpty
+            $err.Count | Should -Be 1
+            [string]$err | Should -Be "Unknown provider keyword 'Invalid'"
+            $err[0].Exception | Should -BeOfType ([ArgumentException])
         }
 
         It "Accepts level <Level> as string" -TestCases @(
@@ -107,7 +146,7 @@ Describe "New-PSEtwEventInfo" -Skip:(-not $IsAdmin) {
         ) {
             param ($Level, $Expected)
 
-            $actual = New-PSEtwEventInfo -Provider PSEtw-Event -Level $Level
+            $actual = New-PSEtwEventInfo -Provider PSEtw-Manifest -Level $Level
             $actual.Level | Should -Be $Expected
         }
 
@@ -117,22 +156,22 @@ Describe "New-PSEtwEventInfo" -Skip:(-not $IsAdmin) {
         }
 
         It "Accepts known level as int" {
-            $actual = New-PSEtwEventInfo -Provider PSEtw-Event -Level 3
+            $actual = New-PSEtwEventInfo -Provider PSEtw-Manifest -Level 3
             $actual.Level | Should -Be 3
         }
 
         It "Accepts known level as int string" {
-            $actual = New-PSEtwEventInfo -Provider PSEtw-Event -Level "0x3"
+            $actual = New-PSEtwEventInfo -Provider PSEtw-Manifest -Level "0x3"
             $actual.Level | Should -Be 3
         }
 
         It "Accepts any level as int" {
-            $actual = New-PSEtwEventInfo -Provider PSEtw-Event -Level 60
+            $actual = New-PSEtwEventInfo -Provider PSEtw-Manifest -Level 60
             $actual.Level | Should -Be 60
         }
 
         It "Fails with level greater than 0xFF" {
-            $actual = New-PSEtwEventInfo -Provider PSEtw-Event -Level 256 -ErrorAction SilentlyContinue -ErrorVariable err
+            $actual = New-PSEtwEventInfo -Provider PSEtw-Manifest -Level 256 -ErrorAction SilentlyContinue -ErrorVariable err
             $actual | Should -BeNullOrEmpty
             $err.Count | Should -Be 1
             [string]$err | Should -Be "Provider level 256 must be less than or equal to 255"
@@ -149,7 +188,7 @@ Describe "New-PSEtwEventInfo" -Skip:(-not $IsAdmin) {
                     return
                 }
 
-                $_.CompletionText | Should -Be 'PSEtw-Event'
+                $_.CompletionText | Should -Be 'PSEtw-Manifest'
                 $_.ListItemText | Should -Be $_.CompletionText
 
                 $_
@@ -165,7 +204,7 @@ Describe "New-PSEtwEventInfo" -Skip:(-not $IsAdmin) {
                     throw "Found extra provider $($_.ListItemText)"
                 }
 
-                $_.CompletionText | Should -Be 'PSEtw-Event'
+                $_.CompletionText | Should -Be 'PSEtw-Manifest'
                 $_.ListItemText | Should -Be $_.CompletionText
 
                 $_
@@ -192,7 +231,7 @@ Describe "New-PSEtwEventInfo" -Skip:(-not $IsAdmin) {
         ) {
             param ($Param)
 
-            $actual = Complete "New-PSEtwEventInfo -Provider PSEtw-Event -$Param "
+            $actual = Complete "New-PSEtwEventInfo -Provider PSEtw-Manifest -$Param "
             $actual.Count | Should -BeGreaterOrEqual 3
             $found = $actual | ForEach-Object {
                 if ($_.ListItemText -eq 'Foo') {
@@ -259,7 +298,7 @@ Describe "New-PSEtwEventInfo" -Skip:(-not $IsAdmin) {
         }
 
         It "Completes available levels with specific provider" {
-            $actual = Complete 'New-PSEtwEventInfo -Provider PSEtw-Event -Level E'
+            $actual = Complete 'New-PSEtwEventInfo -Provider PSEtw-Manifest -Level E'
             $actual.Count | Should -Be 2
             $found = $actual | ForEach-Object {
                 if ($_.ListItemText -eq 'Error') {

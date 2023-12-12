@@ -1,30 +1,26 @@
 Add-Type -Path $PSScriptRoot\tests\PSEtwProvider\bin\Release\netstandard2.0\publish\PSEtwProvider.dll
-$l = [PSEtwProvider.PSEtwEvent]::new()
+
+$l = [Microsoft.TraceLoggingDynamic.EventProvider]::new("PSEtw-TraceLogger", [Microsoft.TraceLoggingDynamic.EventProviderOptions]::new())
+# $l = [PSEtwProvider.PSEtwManifest]::new()
 try {
-    # $l.LevelLogAlways(20)
-    $l.TypeTest(
-        $true,
-        [byte]128,
-        [byte[]]@(0, 1, 2, 3),
-        [char]1,
-        [DateTime]::new(1970, 1, 1, 0, 0, 0, [DateTimeKind]::Utc),
-        [DateTime]::new(1970, 1, 1, 0, 0, 0, [DateTimeKind]::Local),
-        [DateTime]::new(1970, 1, 1, 0, 0, 0, [DateTimeKind]::Unspecified),
-        [Double]'10.32',
-        [PSEtwProvider.IntEnum]::Value2,
-        [PSEtwProvider.IntFlags]'Value2, Value3',
-        [Guid]"40fc67b6-6d25-45d5-b7ee-9ebc87ee247e",
-        -1,
-        -2,
-        -3,
-        [IntPtr]-4,
-        -5,
-        [float]'102.01',
-        [UInt16]"32768",
-        [UInt32]"2147483648",
-        [UInt64]"9223372036854775808"
-    )
-    $l.BasicEvent(10)
+    $eb = [Microsoft.TraceLoggingDynamic.EventBuilder]::new()
+    $eb.Reset("MyEventName", [Microsoft.TraceLoggingDynamic.EventLevel]::Info, 1, 0)
+
+    $eb.AddUnicodeString("RootEntry 1", "foo" , [Microsoft.TraceLoggingDynamic.EventOutType]::Default, 0)
+
+    $null = $eb.AddStruct("MyStruct", 2)
+    $eb.AddUnicodeString("field 1", "value 1", [Microsoft.TraceLoggingDynamic.EventOutType]::Default, 0)
+    $eb.AddUnicodeString("field 2", "value 2", [Microsoft.TraceLoggingDynamic.EventOutType]::Default, 0)
+
+    $eb.AddUnicodeString("RootEntry 2", "bar" , [Microsoft.TraceLoggingDynamic.EventOutType]::Default, 0)
+
+    $null = $l.Write($eb)
+
+    # $l.StringTest(
+    #     "string 1",
+    #     "Caf$([char]0xE9)s",
+    #     "string 3 with unicode $([Char]::ConvertFromUtf32(0x1F3B5))"
+    # )
 }
 finally {
     $l.Dispose()

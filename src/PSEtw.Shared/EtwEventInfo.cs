@@ -93,7 +93,7 @@ public sealed class KeywordsStringOrLong
             return (long)_keywordLong;
         }
 
-        string keywordName = _keywordString ?? "";
+        string keywordName = _keywordString!;
         if (keywordName == "*")
         {
             return -1;

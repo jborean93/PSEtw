@@ -62,7 +62,11 @@ Function Global:Invoke-WithTestEtwProvider {
     param (
         [Parameter(Mandatory, Position = 0)]
         [ScriptBlock]
-        $ScriptBlock
+        $ScriptBlock,
+
+        [Parameter()]
+        [switch]
+        $TraceLogger
     )
 
     $etwAssembly = [Path]::Combine($PSScriptRoot, 'PSEtwProvider', 'bin', 'Release', 'netstandard2.0', 'publish', 'PSEtwProvider.dll')
@@ -83,8 +87,27 @@ Function Global:Invoke-WithTestEtwProvider {
         $ps.Runspace = $rs
         [void]$ps.AddCommand("Add-Type").AddParameter("LiteralPath", $etwAssembly).AddStatement()
         [void]$ps.AddScript(@'
-param ([Parameter(Mandatory)][string]$ScriptBlock)
-$logger = [PSEtwProvider.PSEtwEvent]::new()
+param (
+    [Parameter(Mandatory)]
+    [string]
+    $ScriptBlock,
+
+    [Parameter()]
+    [switch]
+    $TraceLogger
+)
+
+$ErrorActionPreference = 'Stop'
+
+$logger = if ($TraceLogger) {
+    [Microsoft.TraceLoggingDynamic.EventProvider]::new(
+        "PSEtw-TraceLogger",
+        [Microsoft.TraceLoggingDynamic.EventProviderOptions]::new())
+}
+else {
+    [PSEtwProvider.PSEtwManifest]::new()
+}
+
 try {
     . ([ScriptBlock]::Create($ScriptBlock))
 }
@@ -93,6 +116,7 @@ finally {
 }
 '@)
         [void]$ps.AddParameter('ScriptBlock', $ScriptBlock)
+        [void]$ps.AddParameter("TraceLogger", $TraceLogger)
         [void]$ps.Invoke()
     }
     catch {
