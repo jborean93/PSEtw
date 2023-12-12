@@ -356,14 +356,14 @@ Describe "Register-PSEtwEvent" -Skip:(-not $IsAdmin) {
 
             $prop = $actual.SourceEventArgs.Info.Properties[9]
             $prop.Name | Should -Be enumValue
-            $prop.Value | Should -BeOfType ([uint])
+            $prop.Value | Should -BeOfType ([UInt32])
             $prop.Value | Should -Be 1
             $prop.DisplayValue | Should -Be 'Value2 '
             $prop.ToString() | Should -Be 'enumValue=Value2 '
 
             $prop = $actual.SourceEventArgs.Info.Properties[10]
             $prop.Name | Should -Be enumFlags
-            $prop.Value | Should -BeOfType ([uint])
+            $prop.Value | Should -BeOfType ([UInt32])
             $prop.Value | Should -Be 3
             $prop.DisplayValue | Should -Be 'Value2 |Value3 '
             $prop.ToString() | Should -Be 'enumFlags=Value2 |Value3 '
@@ -700,10 +700,10 @@ Describe "Register-PSEtwEvent" -Skip:(-not $IsAdmin) {
                 [IntPtr]-1,
                 [Microsoft.TraceLoggingDynamic.EventOutType]::CodePointer,
                 0)
-            $eb.AddUIntPtr("AddUIntPtr", [UIntPtr]1, $defaultOut, 0)
+            $eb.AddUIntPtr("AddUIntPtr", [UIntPtr]::new(1), $defaultOut, 0)
             $eb.AddUIntPtr(
                 "AddUIntPtrAsPointer",
-                [UIntPtr]1,
+                [UIntPtr]::new(1),
                 [Microsoft.TraceLoggingDynamic.EventOutType]::CodePointer,
                 0)
             $eb.AddSystemTime("AddSystemTime", @(1999, 12, 0, 12, 23, 59, 59, 999), $defaultOut, 0)
@@ -841,7 +841,7 @@ Describe "Register-PSEtwEvent" -Skip:(-not $IsAdmin) {
             $prop = $actual.SourceEventArgs.Info.Properties[1]
             $prop.Name | Should -Be AddUnicodeStringArray1.Count
             $prop.Value | Should -Be 1
-            $prop.Value | Should -BeOfType ([ushort])
+            $prop.Value | Should -BeOfType ([UInt16])
             $prop.DisplayValue | Should -Be 1
             $prop.ToString() | Should -Be "AddUnicodeStringArray1.Count=1"
 
@@ -855,7 +855,7 @@ Describe "Register-PSEtwEvent" -Skip:(-not $IsAdmin) {
             $prop = $actual.SourceEventArgs.Info.Properties[3]
             $prop.Name | Should -Be AddUnicodeStringArray2.Count
             $prop.Value | Should -Be 2
-            $prop.Value | Should -BeOfType ([ushort])
+            $prop.Value | Should -BeOfType ([UInt16])
             $prop.DisplayValue | Should -Be 2
             $prop.ToString() | Should -Be "AddUnicodeStringArray2.Count=2"
 

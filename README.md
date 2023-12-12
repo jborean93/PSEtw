@@ -1,6 +1,6 @@
 # PSEtw
 
-[![Test workflow](https://github.com/jborean93/PSEtw/workflows/Test%20PSETW/badge.svg)](https://github.com/jborean93/PSEtw/actions/workflows/ci.yml)
+[![Test workflow](https://github.com/jborean93/PSEtw/workflows/Test%20PSEtw/badge.svg)](https://github.com/jborean93/PSEtw/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/jborean93/PSEtw/branch/main/graph/badge.svg?token=b51IOhpLfQ)](https://codecov.io/gh/jborean93/PSEtw)
 [![PowerShell Gallery](https://img.shields.io/powershellgallery/dt/PSEtw.svg)](https://www.powershellgallery.com/packages/PSEtw)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/jborean93/PSEtw/blob/main/LICENSE)

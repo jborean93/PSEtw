@@ -13,8 +13,8 @@ if ($IsCoreClr) {
     $innerMod = &$importModule -Assembly $mainModule -PassThru:$isReload
 }
 else {
-    $innerMod = if ('PSEtw.PSETWGlobals' -as [type]) {
-        $modAssembly = [PSEtw.PSETWGlobals].Assembly
+    $innerMod = if ('PSEtw.PSEtwGlobals' -as [type]) {
+        $modAssembly = [PSEtw.PSEtwGlobals].Assembly
         &$importModule -Assembly $modAssembly -Force -PassThru
     }
     else {
