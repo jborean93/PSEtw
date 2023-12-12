@@ -49,12 +49,12 @@ public sealed class EtwEventArgs : EventArgs
             IntPtr.Zero,
             ref bufferSize);
 
-        if (res == 0x00000490) // ERROR_NOT_FOUND
+        if (res == Win32Error.ERROR_NOT_FOUND)
         {
             // No known schema for this event so we can only return out header.
             return new(header, null);
         }
-        else if (res != 0 && res != 122) // ERROR_INSUFFICIENT_BUFFER
+        else if (res != Win32Error.ERROR_SUCCESS && res != Win32Error.ERROR_INSUFFICIENT_BUFFER)
         {
             // Some other error we should be reporting back if possible.
             throw new Win32Exception(res);
@@ -64,10 +64,7 @@ public sealed class EtwEventArgs : EventArgs
         try
         {
             res = Tdh.TdhGetEventInformation(ref record, 0, IntPtr.Zero, buffer, ref bufferSize);
-            if (res != 0)
-            {
-                throw new Win32Exception(res);
-            }
+            Win32Error.ThrowIfError(res);
 
             unsafe
             {
@@ -377,7 +374,7 @@ public sealed class EventPropertyInfo
         short arrayCount = GetArrayCount(info.Flags, info.Count, integerValues);
         if (arrayCount == 0)
         {
-            throw new NotImplementedException($"Property '{name}' has an array count of 0");
+            throw new InvalidOperationException($"Property '{name}' has an array count of 0");
         }
 
         // PropertyParamFixedCount is used to signify if an array of 1 value is
@@ -498,7 +495,7 @@ public sealed class EventPropertyInfo
             IntPtr.Zero,
             ref mapNameSize);
 
-        if (mapNameRes != 0 && mapNameRes != 122)  // ERROR_INSUFFICIENT_BUFFER
+        if (mapNameRes != Win32Error.ERROR_SUCCESS && mapNameRes != Win32Error.ERROR_INSUFFICIENT_BUFFER)
         {
             throw new Win32Exception(mapNameRes);
         }
@@ -510,7 +507,7 @@ public sealed class EventPropertyInfo
             mapNameBuffer,
             ref mapNameSize);
 
-        if (mapNameRes != 0)
+        if (mapNameRes != Win32Error.ERROR_SUCCESS)
         {
             Marshal.FreeHGlobal(mapNameBuffer);
             throw new Win32Exception(mapNameRes);
@@ -586,12 +583,12 @@ public sealed class EventPropertyInfo
                             buffer,
                             out consumed);
 
-                        if (res == 0x0000007A)  // ERROR_INSUFFICIENT_BUFFER
+                        if (res == Win32Error.ERROR_INSUFFICIENT_BUFFER)
                         {
                             buffer = Marshal.ReAllocHGlobal(buffer, (nint)bufferSize);
                             continue;
                         }
-                        else if (res == 0)
+                        else if (res == Win32Error.ERROR_SUCCESS)
                         {
                             // The buffer is a null terminated WCHAR so we
                             // divide the bytes by 2 and remove the null char.

@@ -19,15 +19,12 @@ internal static class ProviderHelper
             while (true)
             {
                 int res = Tdh.TdhEnumerateProviders(buffer, ref bufferSize);
-                if (res == 0x0000007A)  // ERROR_INSUFFICIENT_BUFFER
+                if (res == Win32Error.ERROR_INSUFFICIENT_BUFFER)
                 {
                     buffer = Marshal.ReAllocHGlobal(buffer, (nint)bufferSize);
                     continue;
                 }
-                else if (res != 0)
-                {
-                    throw new Win32Exception(res);
-                }
+                Win32Error.ThrowIfError(res);
 
                 unsafe
                 {
@@ -87,14 +84,12 @@ internal static class ProviderHelper
                     {
                         res = Advapi32.QueryAllTracesW(propArrayPtr, traceCount, out traceCount);
                     }
-                    if (res == 0x0000007A)  // ERROR_INSUFFICIENT_BUFFER
+
+                    if (res == Win32Error.ERROR_INSUFFICIENT_BUFFER)
                     {
                         continue;
                     }
-                    else if (res != 0)
-                    {
-                        throw new Win32Exception(res);
-                    }
+                    Win32Error.ThrowIfError(res);
 
                     propBuffer = buffer;
                     for (int i = 0; i < traceCount; i++)
@@ -130,7 +125,7 @@ internal static class ProviderHelper
                 fieldType,
                 buffer,
                 ref bufferSize);
-            if (res == 0x0000007A) // ERROR_INSUFFICIENT_BUFFER
+            if (res == Win32Error.ERROR_INSUFFICIENT_BUFFER)
             {
                 buffer = Marshal.AllocHGlobal(bufferSize);
                 res = Tdh.TdhEnumerateProviderFieldInformation(
@@ -139,17 +134,13 @@ internal static class ProviderHelper
                     buffer,
                     ref bufferSize);
             }
-            else if (res == 0x00000490)  // ERROR_NOT_FOUND
+            else if (res == Win32Error.ERROR_NOT_FOUND)
             {
                 // TraceLoggers won't have any fields defined, just present
                 // there are none.
                 return Array.Empty<ProviderFieldInfo>();
             }
-
-            if (res != 0)
-            {
-                throw new Win32Exception(res);
-            }
+            Win32Error.ThrowIfError(res);
 
             unsafe
             {

@@ -44,7 +44,7 @@ internal static class EtwApi
                 name,
                 buffer);
 
-            if (res != 0)
+            if (res != Win32Error.ERROR_SUCCESS)
             {
                 Marshal.FreeHGlobal(buffer);
                 throw new Win32Exception(res);
@@ -72,10 +72,7 @@ internal static class EtwApi
                 session.DangerousGetHandle(),
                 EventTraceControl.EVENT_TRACE_CONTROL_STOP);
 
-            if (res != 0)
-            {
-                throw new Win32Exception(res);
-            }
+            Win32Error.ThrowIfError(res);
         }
     }
 
@@ -101,10 +98,7 @@ internal static class EtwApi
                 null);
         }
 
-        if (res != 0)
-        {
-            throw new Win32Exception(res);
-        }
+        Win32Error.ThrowIfError(res);
     }
 
     public static SafeEtwTrace OpenTrace(Advapi32.EVENT_TRACE_LOGFILEW logFile)
@@ -169,7 +163,11 @@ internal static class EtwApi
                     controlCode);
             }
 
-            if (res != 0)
+            // ERROR_MORE_DATA might be returned if the buffer was too small.
+            // I don't see how but I see it in CI quite regularly. The docs
+            // indicate it's safe to ignore. I personally think it happens if
+            // there are unprocessed events in the trace session.
+            if (res != Win32Error.ERROR_SUCCESS && res != Win32Error.ERROR_MORE_DATA)
             {
                 Marshal.FreeHGlobal(buffer);
                 throw new Win32Exception(res);
@@ -198,11 +196,11 @@ internal static class EtwApi
                         bufferSize * guidSize,
                         out int returnLength);
 
-                    if (res == 0)
+                    if (res == Win32Error.ERROR_SUCCESS)
                     {
                         return buffer.Slice(0, returnLength / guidSize).ToArray();
                     }
-                    else if (res == 122)
+                    else if (res == Win32Error.ERROR_INSUFFICIENT_BUFFER)
                     {
                         bufferSize = returnLength / guidSize;
                     }
@@ -238,7 +236,7 @@ internal sealed class SafeEtwTraceSession : SafeHandle
             Marshal.FreeHGlobal(handle);
             handle = IntPtr.Zero;
         }
-        return res == 0;
+        return res == Win32Error.ERROR_SUCCESS;
     }
 }
 
@@ -263,6 +261,6 @@ internal sealed class SafeEtwTrace : SafeHandle
             res = Advapi32.CloseTrace(_traceHandle);
         }
 
-        return res == 0;
+        return res == Win32Error.ERROR_SUCCESS;
     }
 }
