@@ -161,6 +161,42 @@ internal static class EtwApi
             return new(props->Wnode.HistoricalContext, buffer);
         }
     }
+
+    public static Guid[] GetTraceGuids()
+    {
+        int guidSize = Marshal.SizeOf<Guid>();
+        unsafe
+        {
+            int bufferSize = 64;
+            while (true)
+            {
+                Span<Guid> buffer = new Span<Guid>(new Guid[bufferSize]);
+                fixed (Guid* bufferPtr = buffer)
+                {
+                    int res = Advapi32.EnumerateTraceGuidsEx(
+                        (int)TRACE_INFO_CLASS.TraceGuidQueryList,
+                        IntPtr.Zero,
+                        0,
+                        (nint)bufferPtr,
+                        bufferSize * guidSize,
+                        out int returnLength);
+
+                    if (res == 0)
+                    {
+                        return buffer.Slice(0, returnLength / guidSize).ToArray();
+                    }
+                    else if (res == 122)
+                    {
+                        bufferSize = returnLength / guidSize;
+                    }
+                    else
+                    {
+                        throw new Win32Exception(res);
+                    }
+                }
+            }
+        }
+    }
 }
 
 

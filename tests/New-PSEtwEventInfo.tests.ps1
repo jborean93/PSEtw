@@ -33,14 +33,6 @@ Describe "New-PSEtwEventInfo" -Skip:(-not $IsAdmin) {
             $actual.Provider | Should -Be $providerGuid
         }
 
-        It "Fails with invalid provider" {
-            $actual = New-PSEtwEventInfo -Provider 'Invalid Provider' -ErrorAction SilentlyContinue -ErrorVariable err
-            $actual | Should -BeNullOrEmpty
-            $err.Count | Should -Be 1
-            [string]$err | Should -Be "Unknown ETW provider 'Invalid Provider'"
-            $err[0].Exception | Should -BeOfType ([ArgumentException])
-        }
-
         It "Accepts <Param> as string" -TestCases @(
             @{ Param = "KeywordsAll" }
             @{ Param = "KeywordsAny" }

@@ -109,8 +109,11 @@ internal sealed class ProviderCompleter : IArgumentCompleter
     {
         WildcardPattern pattern = new($"{wordToComplete}*", WildcardOptions.IgnoreCase);
 
+        HashSet<Guid> registeredProviders = new();
         foreach ((Guid providerId, string name) in ProviderHelper.GetProviders())
         {
+            registeredProviders.Add(providerId);
+
             string value = providerId.ToString();
             if (
                 name.StartsWith(wordToComplete, StringComparison.OrdinalIgnoreCase) ||
@@ -118,6 +121,20 @@ internal sealed class ProviderCompleter : IArgumentCompleter
             )
             {
                 yield return CompletorHelper.GenerateResult(name, $"Provider Guid: {value}");
+            }
+        }
+
+        foreach (Guid providerId in EtwApi.GetTraceGuids())
+        {
+            if (registeredProviders.Add(providerId))
+            {
+                continue;  // Already checked
+            }
+
+            string value = providerId.ToString();
+            if (pattern.IsMatch(value))
+            {
+                yield return CompletorHelper.GenerateResult(value, $"TraceLogging Provider");
             }
         }
     }

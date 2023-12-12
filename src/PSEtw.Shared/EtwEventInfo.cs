@@ -2,6 +2,8 @@ using PSEtw.Shared.Native;
 using System;
 using System.Linq;
 using System.Management.Automation;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace PSEtw.Shared;
 
@@ -214,6 +216,33 @@ public sealed class ProviderStringOrGuid
             }
         }
 
-        throw new ArgumentException($"Unknown ETW provider '{providerName}'");
+        // We could be dealing with a TraceLogger provider where the names
+        // aren't registered. Use the logic from MS to derive the Guid from
+        // the name and hope the user provided the right name.
+        return ProviderIdFromName(providerName);
+    }
+
+    private static Guid ProviderIdFromName(string name)
+    {
+        // https://learn.microsoft.com/en-us/windows/win32/api/traceloggingprovider/nf-traceloggingprovider-tracelogging_define_provider
+        byte[] signature = new byte[]
+        {
+            0x48, 0x2C, 0x2D, 0xB2, 0xC3, 0x90, 0x47, 0xC8,
+            0x87, 0xF8, 0x1A, 0x15, 0xBF, 0xC1, 0x30, 0xFB
+        };
+        byte[] nameBytes = Encoding.BigEndianUnicode.GetBytes(name.ToUpperInvariant());
+
+        using SHA1 sha1 = SHA1.Create();
+        sha1.TransformBlock(signature, 0, signature.Length, null, 0);
+        sha1.TransformFinalBlock(nameBytes, 0, nameBytes.Length);
+
+        Span<byte> hash = sha1.Hash.AsSpan(0, 16);
+        hash[7] = (byte)((hash[7] & 0x0F) | 0x50);
+
+#if NET6_0_OR_GREATER
+        return new(hash);
+#else
+        return new(hash.ToArray());
+#endif
     }
 }
