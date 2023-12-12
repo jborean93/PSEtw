@@ -13,7 +13,7 @@ Stops an active PSEtw trace session.
 ## SYNTAX
 
 ```
-Stop-PSEtwTrace [-InputObject] <EtwEventArgs> [-ProgressAction <ActionPreference>] [<CommonParameters>]
+Stop-PSEtwTrace [-InputObject] <EtwEventArgs> [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -34,6 +34,7 @@ PS C:\> Trace-PSEtwEvent -Provider MyProvider | ForEach-Object {
 ```
 
 Will capture events for the provider `MyProvider` until an event with the `Id` of `10` is received.
+The trace is stopped by piping the event into `Stop-PSEtwTrace`.
 
 ## PARAMETERS
 
@@ -49,21 +50,6 @@ Required: True
 Position: 0
 Default value: None
 Accept pipeline input: True (ByValue)
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-New common parameter introduced in PowerShell 7.4.
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
 Accept wildcard characters: False
 ```
 

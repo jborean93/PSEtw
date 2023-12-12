@@ -1,7 +1,7 @@
 ---
 Module Name: PSEtw
 Module Guid: 2ec6ab2d-0c3b-4b1f-bd5c-cf38704e996b
-Download Help Link: 
+Download Help Link:
 Help Version: 1.0.0.0
 Locale: en-US
 ---
@@ -9,6 +9,8 @@ Locale: en-US
 # PSEtw Module
 ## Description
 ETW consumer for PowerShell.
+This module can be used to collect ETW events from Manifest and Trace Logging providers in realtime.
+Currently on Manifest and Trace Logging ETW providers are supported, MOF and WPP providers cannot be used.
 
 ## PSEtw Cmdlets
 ### [New-PSEtwEventInfo](New-PSEtwEventInfo.md)

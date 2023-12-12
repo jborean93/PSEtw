@@ -14,13 +14,13 @@ Creates a new ETW Trace Session.
 
 ### Name (Default)
 ```
-New-PSEtwSession [-SystemLogger] [-SessionName] <String[]> [-ProgressAction <ActionPreference>] [-WhatIf]
- [-Confirm] [<CommonParameters>]
+New-PSEtwSession [-SystemLogger] [-SessionName] <TraceSessionOrString[]> [-WhatIf] [-Confirm]
+ [<CommonParameters>]
 ```
 
 ### Default
 ```
-New-PSEtwSession [-Default] [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm] [<CommonParameters>]
+New-PSEtwSession [-Default] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -75,27 +75,12 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -ProgressAction
-New common parameter introduced in PowerShell 7.4.
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
 ### -SessionName
 The name of the session to be created.
 A session name cannot exceed 1024 characters, is case insensitive, and must be unique.
 
 ```yaml
-Type: String[]
+Type: TraceSessionOrString[]
 Parameter Sets: Name
 Aliases: Name
 

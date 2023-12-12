@@ -14,8 +14,7 @@ Create a trace info object used for filtering traces with an ETW event.
 
 ```
 New-PSEtwEventInfo -Provider <ProviderStringOrGuid> [-KeywordsAny <KeywordsStringOrLong[]>]
- [-KeywordsAll <KeywordsStringOrLong[]>] [-Level <LevelStringOrInt>] [-ProgressAction <ActionPreference>]
- [<CommonParameters>]
+ [-KeywordsAll <KeywordsStringOrLong[]>] [-Level <LevelStringOrInt>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -42,7 +41,7 @@ PS C:\> $info = New-PSEtwEventInfo @eventParams
 PS C:\> $info | Trace-PSEtwEvent
 ```
 
-{{ Add example description here }}
+Creates a event info that can be used to filter events for the `PowerShellCore` provider, the keywords `Runspace`, `Pipeline`, and all events lower than the `Verbose` level.
 
 ## PARAMETERS
 
@@ -51,8 +50,9 @@ Restrict the events for the specified provider to only the ones that match all t
 This filter does not apply to events that do not have a keyword associated with it.
 
 The keyword can either be specified as a 64-bit integer value which are combined together or as a string representing the keyword.
-The keyword strings are dependent on the provider that was specified and what keywords it defines.
-This parameter supports tab completion to retrieve the keywords for a provider if one is set by `-Provider`.
+The keyword strings are dependent on the provider that was specified and what keywords it defines through its manifest.
+Trace Logging providers that aren't registered on the system cannot be filtered by name, the integer value must be specified for these providers.
+This parameter supports tab completion to retrieve the keywords for a registered provider if one is set by `-Provider`.
 The value `*` represents the numeric value `0xFFFFFFFFFFFFFFFF` which is all keywords set.
 
 
@@ -73,8 +73,9 @@ Restrict the events for the specified provider to only the ones that match any o
 This filter does not apply to events that do not have a keyword associated with it.
 
 The keyword can either be specified as a 64-bit integer value which are combined together or as a string representing the keyword.
-The keyword strings are dependent on the provider that was specified and what keywords it defines.
-This parameter supports tab completion to retrieve the keywords for a provider if one is set by `-Provider`.
+The keyword strings are dependent on the provider that was specified and what keywords it defines through its manifest.
+Trace Logging providers that aren't registered on the system cannot be filtered by name, the integer value must be specified for these providers.
+This parameter supports tab completion to retrieve the keywords for a registered provider if one is set by `-Provider`.
 The value `*` represents the numeric value `0xFFFFFFFFFFFFFFFF` which is all keywords set.
 
 ```yaml
@@ -118,25 +119,11 @@ Accept pipeline input: True (ByPropertyName)
 Accept wildcard characters: False
 ```
 
-### -ProgressAction
-New common parameter introduced in PowerShell 7.4.
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
 ### -Provider
 The provider name or guid to retrieve events for.
-This parameter supports tab completion to retrieve all available providers that are installed on the system.
-If set then other parameters tab completion can retrieve values specific to that provider for example `New-PSEtwEventInfo -Provider PowerShellCore -KeywordsAny <ctrl+space>`.
+This parameter supports tab completion to retrieve all available providers that have been registered on the system.
+Trace Logger providers can be specified by name but as they are not registered on the system by name they cannot be validated when creating the filter.
+If set to a registered provider, other parameters tab completion can retrieve values specific to that provider for example `New-PSEtwEventInfo -Provider PowerShellCore -KeywordsAny <ctrl+space>`.
 
 ```yaml
 Type: ProviderStringOrGuid
@@ -167,7 +154,7 @@ The level name or numeric flag value can be passed as input using the property n
 ## OUTPUTS
 
 ### PSEtw.Shared.EtwTraceInfo
-This cmdlet outputs an `EtwTraceInfo` that contains trace details to use when starting a trace. It can be provided using the `-TraceInfo` cmdlet or piped into the Register-PSEtwEvent (./Register-PSEtwEvent.md) or Trace-PSEtwEvent (./Trace-PSEtwEvent.md)cmdlets.
+This cmdlet outputs an `EtwTraceInfo` that contains trace details to use when starting a trace. It can be provided using the `-TraceInfo` cmdlet or piped into the [Register-PSEtwEvent](./Register-PSEtwEvent.md) or [Trace-PSEtwEvent](./Trace-PSEtwEvent.md) cmdlets.
 
 ## NOTES
 
