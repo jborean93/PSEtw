@@ -14,13 +14,13 @@ Creates a new ETW Trace Session.
 
 ### Name (Default)
 ```
-New-PSEtwSession [-SystemLogger] [-SessionName] <TraceSessionOrString[]> [-WhatIf] [-Confirm]
- [<CommonParameters>]
+New-PSEtwSession [-SystemLogger] [-SessionName] <TraceSessionOrString[]> [-ProgressAction <ActionPreference>]
+ [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Default
 ```
-New-PSEtwSession [-Default] [-WhatIf] [-Confirm] [<CommonParameters>]
+New-PSEtwSession [-Default] [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -67,6 +67,21 @@ The default Trace Session is used if no `-SessionName` is specified with [Regist
 Type: SwitchParameter
 Parameter Sets: Default
 Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ProgressAction
+New common parameter introduced in PowerShell 7.4.
+
+```yaml
+Type: ActionPreference
+Parameter Sets: (All)
+Aliases: proga
 
 Required: False
 Position: Named

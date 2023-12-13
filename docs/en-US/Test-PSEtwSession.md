@@ -14,12 +14,13 @@ Tests if an ETW Trace Session exists or not.
 
 ### Name (Default)
 ```
-Test-PSEtwSession [-SessionName] <TraceSessionOrString[]> [<CommonParameters>]
+Test-PSEtwSession [-SessionName] <TraceSessionOrString[]> [-ProgressAction <ActionPreference>]
+ [<CommonParameters>]
 ```
 
 ### Default
 ```
-Test-PSEtwSession [-Default] [<CommonParameters>]
+Test-PSEtwSession [-Default] [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -46,6 +47,21 @@ The default Trace Session is used if no `-SessionName` is specified with [Regist
 Type: SwitchParameter
 Parameter Sets: Default
 Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ProgressAction
+New common parameter introduced in PowerShell 7.4.
+
+```yaml
+Type: ActionPreference
+Parameter Sets: (All)
+Aliases: proga
 
 Required: False
 Position: Named

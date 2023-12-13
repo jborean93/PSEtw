@@ -26,7 +26,7 @@ internal partial class Tdh
         public int RelatedActivityIDNameOffset;
         public int PropertyCount;
         public int TopLevelPropertyCount;
-        public int Flags;
+        public int Tags;
         // public EVENT_PROPERTY_INFO[] EventPropertyInfoArray[ANYSIZE_ARRAY];
     }
 

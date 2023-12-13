@@ -479,7 +479,7 @@ Function Format-CoverageInfo {
                 }
 
                 if ($bold) {
-                    $_.Value = "$([char]27)[1m$($_.Value)$([char]27)[0m"
+                    $_.Value = "$([char]27)[93;1m$($_.Value)$([char]27)[0m"
                 }
             }
 

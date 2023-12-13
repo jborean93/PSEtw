@@ -107,8 +107,8 @@ public sealed class EtwTraceSession : IDisposable
         _enabledTraces = new();
     }
 
-    internal EtwTrace OpenTrace()
-        => new(this);
+    internal EtwTrace OpenTrace(bool includeRawData)
+        => new(this, includeRawData);
 
     public void Dispose()
     {

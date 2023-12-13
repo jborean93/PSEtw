@@ -16,12 +16,13 @@ Starts an ETW Trace for the provider specified.
 ```
 Trace-PSEtwEvent [-SessionName <String>] -Provider <ProviderStringOrGuid>
  [-KeywordsAny <KeywordsStringOrLong[]>] [-KeywordsAll <KeywordsStringOrLong[]>] [-Level <LevelStringOrInt>]
- [<CommonParameters>]
+ [-IncludeRawData] [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ### Multi
 ```
-Trace-PSEtwEvent [-SessionName <String>] -TraceInfo <EtwEventInfo[]> [<CommonParameters>]
+Trace-PSEtwEvent [-SessionName <String>] -TraceInfo <EtwEventInfo[]> [-IncludeRawData]
+ [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -31,17 +32,60 @@ A trace will continue to run indefinitely until either the pipeline has been sto
 
 The parameters for this cmdlet define what ETW providers to register to, the keywords, and levels for that provider to subscribe to.
 It is possible to use [New-PSEtwEventInfo](./New-PSEtwEventInfo.md) to define multiple filters when creating an ETW trace.
+See [about_PSEtwEventArgs](./about_PSEtwEventArgs.md) for more information on the structure of the event data that is set in `SourceEventArgs`.
 
 ## EXAMPLES
 
-### Example 1
+### Example 1 - Trace PowerShellCore Runspace events
 ```powershell
-PS C:\> {{ Add example code here }}
+PS C:\> Trace-PSEtwEvent -Provider PowerShellCore -KeywordsAll Runspace
 ```
 
-{{ Add example description here }}
+Starts an interactive trace that outputs the events for `PowerShellCore` with the keyword `Runspace`.
+This will continue to run until the caller stops the pipeline with `ctrl+c`.
+
+### Example 2 - Trace WSMan Authentication events and output as JSON
+```powershell
+PS C:\> Trace-PSEtwEvent -Provider Microsoft-Windows-WinRM -KeywordsAll Keyword.Server, Keyword.Security |
+    ForEach-Object { $_ | ConvertTo-Json -Depth 3 }
+```
+
+Captures authentication trace events for the WinRM listener and outputs the event data as a Json string.
+The `Keyword.Server` and `Keyword.Security` keywords are used when filtering the events.
+Note that the `Keyword.` prefix is how the `WinRM` provider has registered its keyword names, not all providers follow this standard.
+Use tab completion with the `-KeywordsAll` or `-KeywordsAny` parameters with a registered provider set to view the available keywords.
+
+### Example 3 - Trace events and stop the trace when an event is received
+```powershell
+PS C:\> Trace-PSEtwEvent -Provider PowerShellCore -KeywordsAll Runspace | ForEach-Object {
+    $_
+    if ($_.Id -eq -24574) {
+        $_ | Stop-PSEtwTrace
+    }
+}
+```
+
+Captures all `Runspace` traces for `PowerShellCore` and will stop the trace when the event with the ID `-24574` is received.
+This event is the `PowerShell Console Startup` event.
 
 ## PARAMETERS
+
+### -IncludeRawData
+Stores the raw event data as part of the `EventData` property of the returned event arg object.
+If not set this property will be an empty array.
+This is useful when needing to debug the event data if the parser failed to extract the event information.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
 
 ### -KeywordsAll
 Restrict the events for the specified provider to only the ones that match all the keywords specified here.
@@ -116,6 +160,21 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -ProgressAction
+New common parameter introduced in PowerShell 7.4.
+
+```yaml
+Type: ActionPreference
+Parameter Sets: (All)
+Aliases: proga
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -Provider
 The provider name or guid to retrieve events for.
 This parameter supports tab completion to retrieve all available providers that have been registered on the system.
@@ -180,9 +239,7 @@ This cmdlet accepts an `EtwEventInfo` object through the pipeline as part of the
 ## OUTPUTS
 
 ### PSEtw.Shared.EtwEventArgs
-This cmdlet outputs each event as an output object.
-It can be used with other cmdlets like `ForEach-Object` to process the event in realtime.
-The event can be passed into [Stop-PSEtwTrace](./Stop-PSEtwTrace.md) to stop the current trace.
+This cmdlet outputs each event as an output object. It can be used with other cmdlets like `ForEach-Object` to process the event in realtime. The event can be passed into `Stop-PSEtwTrace` to stop the current trace. See `about_PSEtwEventArgs` for more information on the structure of the event data that is set in `SourceEventArgs`.
 
 ## NOTES
 

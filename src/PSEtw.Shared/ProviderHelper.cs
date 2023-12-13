@@ -34,7 +34,7 @@ internal static class ProviderHelper
                     foreach (Tdh.TRACE_PROVIDER_INFO info in providers)
                     {
                         nint stringPtr = IntPtr.Add(buffer, info.ProviderNameoffset);
-                        string providerName = Marshal.PtrToStringUni(stringPtr) ?? "";
+                        string providerName = Marshal.PtrToStringUni(stringPtr) ?? string.Empty;
                         finalRes.Add((info.ProviderGuid, providerName));
                     }
                 }
@@ -96,7 +96,7 @@ internal static class ProviderHelper
                     {
                         Advapi32.EVENT_TRACE_PROPERTIES_V2* prop = (Advapi32.EVENT_TRACE_PROPERTIES_V2*)propBuffer;
                         nint stringPtr = IntPtr.Add(propBuffer, prop->LoggerNameOffset);
-                        sessionNames.Add(Marshal.PtrToStringUni(stringPtr) ?? "");
+                        sessionNames.Add(Marshal.PtrToStringUni(stringPtr) ?? string.Empty);
                         propBuffer = IntPtr.Add(propBuffer, propLength + 4096);
                     }
                 }
@@ -149,8 +149,8 @@ internal static class ProviderHelper
                 Span<Tdh.PROVIDER_FIELD_INFO> fields = new((void*)arrayPtr, infoArray->NumberOfElements);
                 foreach (Tdh.PROVIDER_FIELD_INFO info in fields)
                 {
-                    string name = ReadPtrString(buffer, info.NameOffset) ?? "";
-                    string description = ReadPtrString(buffer, info.DescriptionOffset) ?? "";
+                    string name = ReadPtrString(buffer, info.NameOffset) ?? string.Empty;
+                    string description = ReadPtrString(buffer, info.DescriptionOffset) ?? string.Empty;
                     finalRes.Add(new(name, description, info.Value));
                 }
             }

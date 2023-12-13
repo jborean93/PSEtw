@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Configuration>
+  <ViewDefinitions>
+    <View>
+      <Name>PSEtw.Shared.EtwEventArgs</Name>
+      <ViewSelectedBy>
+        <TypeName>PSEtw.Shared.EtwEventArgs</TypeName>
+      </ViewSelectedBy>
+      <TableControl>
+        <TableHeaders>
+          <TableColumnHeader>
+            <Width>30</Width>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Width>30</Width>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Width>100</Width>
+          </TableColumnHeader>
+        </TableHeaders>
+        <TableRowEntries>
+          <TableRowEntry>
+            <TableColumnItems>
+              <TableColumnItem>
+                <PropertyName>ProviderName</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>TaskName</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>EventMessage</PropertyName>
+              </TableColumnItem>
+            </TableColumnItems>
+          </TableRowEntry>
+        </TableRowEntries>
+      </TableControl>
+    </View>
+  </ViewDefinitions>
+</Configuration>

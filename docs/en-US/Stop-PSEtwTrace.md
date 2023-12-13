@@ -13,7 +13,7 @@ Stops an active PSEtw trace session.
 ## SYNTAX
 
 ```
-Stop-PSEtwTrace [-InputObject] <EtwEventArgs> [<CommonParameters>]
+Stop-PSEtwTrace [-InputObject] <EtwEventArgs> [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -50,6 +50,21 @@ Required: True
 Position: 0
 Default value: None
 Accept pipeline input: True (ByValue)
+Accept wildcard characters: False
+```
+
+### -ProgressAction
+New common parameter introduced in PowerShell 7.4.
+
+```yaml
+Type: ActionPreference
+Parameter Sets: (All)
+Aliases: proga
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
 Accept wildcard characters: False
 ```
 

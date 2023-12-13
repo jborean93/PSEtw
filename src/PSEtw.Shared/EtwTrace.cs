@@ -7,20 +7,19 @@ namespace PSEtw.Shared;
 
 public sealed class EtwTrace : IDisposable
 {
-    private static readonly Guid EVENT_TRACE_GUID = new("68fdd900-4a3e-11d1-84f4-0000f80464e3");
-
     private Thread? _processThread;
     private EtwTraceSession _session;
     private SafeEtwTrace? _trace;
+    private bool _includeRawData;
 
     private Advapi32.PEVENT_RECORD_CALLBACK _delegate;
     private nint _delegatePtr;
 
     public event EventHandler<EtwEventArgs>? EventReceived;
-    public event UnhandledExceptionEventHandler? UnhandledException;
 
-    internal EtwTrace(EtwTraceSession session)
+    internal EtwTrace(EtwTraceSession session, bool includeRawData)
     {
+        _includeRawData = includeRawData;
         _session = session;
 
         _delegate = new(EventRecordCallback);
@@ -49,25 +48,12 @@ public sealed class EtwTrace : IDisposable
     {
         try
         {
-            /*
-            While https://learn.microsoft.com/en-us/windows/win32/etw/retrieving-event-metadata
-            ignores records with this provider and a 0 Opcode I am seeing 3
-            events for this provider at the start of every trace. I cannot find
-            any documentation around this but am going to ignore them for now.
-            This will probably bite me in the future but lack of documentation
-            is killing me here.
-            */
-            if (record.EventHeader.ProviderId == EVENT_TRACE_GUID)
-            {
-                return;
-            }
-
-            EtwEventArgs eventArgs = EtwEventArgs.Create(ref record);
+            EtwEventArgs eventArgs = new(ref record, _includeRawData);
             EventReceived?.Invoke(this, eventArgs);
         }
-        catch (Exception e)
+        catch
         {
-            UnhandledException?.Invoke(this, new(e, false));
+            return;
         }
     }
 

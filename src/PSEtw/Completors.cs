@@ -166,7 +166,7 @@ internal sealed class CompletorHelper
     {
         if (fakeBoundParameters.Contains("Provider"))
         {
-            ProviderStringOrGuid provider = new(fakeBoundParameters["Provider"]?.ToString() ?? "");
+            ProviderStringOrGuid provider = new(fakeBoundParameters["Provider"]?.ToString() ?? string.Empty);
             Guid providerGuid = provider.GetProviderGuid();
             return ProviderHelper.GetProviderFieldInfo(providerGuid, fieldType);
         }

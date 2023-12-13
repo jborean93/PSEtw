@@ -54,6 +54,9 @@ public abstract class PSEtwEventBase : PSCmdlet, IDisposable
     )]
     public EtwEventInfo[] TraceInfo { get; set; } = Array.Empty<EtwEventInfo>();
 
+    [Parameter]
+    public SwitchParameter IncludeRawData { get; set; }
+
     protected override void BeginProcessing()
     {
         if (string.IsNullOrEmpty(SessionName))
@@ -171,7 +174,7 @@ public abstract class PSEtwEventBase : PSCmdlet, IDisposable
         Debug.Assert(_session != null);
         if (_tracePresent)
         {
-            StartTrace(_session!.OpenTrace());
+            StartTrace(_session!.OpenTrace(IncludeRawData));
         }
     }
 
@@ -284,22 +287,7 @@ public sealed class StopPSEtwTraceCommand : PSCmdlet
 [OutputType(typeof(EtwEventArgs))]
 public sealed class TracePSEtwEventCommand : PSEtwEventBase
 {
-    private sealed class ExceptionOrEvent
-    {
-        public Exception? Exception { get; }
-        public EtwEventArgs? Args { get; }
-
-        public ExceptionOrEvent(Exception exception)
-        {
-            Exception = exception;
-        }
-
-        public ExceptionOrEvent(EtwEventArgs args)
-        {
-            Args = args;
-        }
-    }
-    private BlockingCollection<ExceptionOrEvent> _events = new();
+    private BlockingCollection<EtwEventArgs> _events = new();
 
     protected override void StartTrace(EtwTrace trace)
     {
@@ -307,33 +295,12 @@ public sealed class TracePSEtwEventCommand : PSEtwEventBase
         using (CancellationTokenSource cancelSource = new())
         {
             trace.EventReceived += EventReceived;
-            trace.UnhandledException += UnhandledExceptionReceived;
             trace.Start();
 
-            foreach (ExceptionOrEvent obj in _events.GetConsumingEnumerable())
+            foreach (EtwEventArgs obj in _events.GetConsumingEnumerable())
             {
-                if (obj.Args != null)
-                {
-                    obj.Args.CancelToken = cancelSource;
-                    WriteObject(obj.Args);
-                }
-                else
-                {
-                    Debug.Assert(obj.Exception != null);
-                    Exception exp = obj.Exception!;
-
-                    string msg = $"Unhandled exception in trace callback: {exp.Message}";
-                    ErrorRecord err = new(
-                        exp,
-                        "TraceCallbackException",
-                        ErrorCategory.NotEnabled,
-                        null
-                    )
-                    {
-                        ErrorDetails = new(msg)
-                    };
-                    WriteError(err);
-                }
+                obj.CancelToken = cancelSource;
+                WriteObject(obj);
 
                 if (cancelSource.IsCancellationRequested)
                 {
@@ -344,16 +311,10 @@ public sealed class TracePSEtwEventCommand : PSEtwEventBase
     }
 
     private void EventReceived(object? sender, EtwEventArgs args)
-        => AddToCollection(new(args));
-
-    private void UnhandledExceptionReceived(object? sender, UnhandledExceptionEventArgs args)
-        => AddToCollection(new((Exception)args.ExceptionObject));
-
-    private void AddToCollection(ExceptionOrEvent obj)
     {
         if (!_events.IsAddingCompleted)
         {
-            _events.Add(obj);
+            _events.Add(args);
         }
     }
 

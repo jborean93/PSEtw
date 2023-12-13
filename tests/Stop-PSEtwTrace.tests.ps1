@@ -18,7 +18,7 @@ Describe "Stop-PSEtwTrace" -Skip:(-not $IsAdmin) {
         $ps = [PowerShell]::Create($iss)
         [void]$ps.AddScript({
                 Trace-PSEtwEvent -Provider PSEtw-Manifest | ForEach-Object {
-                    if ($_.Header.Descriptor.Id -gt 0) {
+                    if ($_.Id -gt 0) {
                         $_
                         $_ | Stop-PSEtwTrace
                     }
@@ -38,8 +38,8 @@ Describe "Stop-PSEtwTrace" -Skip:(-not $IsAdmin) {
         $actual.Count | Should -Be 1
         $actual | Should -BeOfType ([PSEtw.Shared.EtwEventArgs])
 
-        $actual.Header.Descriptor.Id | Should -Be 1
-        $actual.Info.Properties[0].Value | Should -Be 10
+        $actual.Id | Should -Be 1
+        $actual.Properties[0].Value | Should -Be 10
     }
 
     It "Ignores events with no cancel token" {
@@ -57,7 +57,7 @@ Describe "Stop-PSEtwTrace" -Skip:(-not $IsAdmin) {
                 $actual | Should -Not -BeNullOrEmpty
                 $actual | Remove-Event
 
-                if ($actual.SourceEventArgs.Header.Descriptor.Id -gt 0) {
+                if ($actual.SourceEventArgs.Id -gt 0) {
                     break
                 }
             }
@@ -80,7 +80,7 @@ Describe "Stop-PSEtwTrace" -Skip:(-not $IsAdmin) {
         $ps = [PowerShell]::Create($iss)
         [void]$ps.AddScript({
                 Trace-PSEtwEvent -Provider PSEtw-Manifest | ForEach-Object {
-                    if ($_.Header.Descriptor.Id -gt 0) {
+                    if ($_.Id -gt 0) {
                         $_
                         $_ | Stop-PSEtwTrace
                     }

@@ -156,7 +156,7 @@ public sealed class LevelStringOrInt
             return (byte)_levelInt;
         }
 
-        string levelName = _levelString ?? "";
+        string levelName = _levelString ?? string.Empty;
         if (levelName == "*")
         {
             return 0xFF;
@@ -207,7 +207,7 @@ public sealed class ProviderStringOrGuid
             return (Guid)_providerGuid;
         }
 
-        string providerName = _providerString ?? "";
+        string providerName = _providerString ?? string.Empty;
         foreach ((Guid providerId, string name) in ProviderHelper.GetProviders())
         {
             if (name.Equals(providerName, StringComparison.OrdinalIgnoreCase))

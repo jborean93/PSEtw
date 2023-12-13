@@ -1,3 +1,4 @@
+using PSEtw.Share;
 using PSEtw.Shared.Native;
 using System;
 using System.Collections.Generic;
@@ -12,207 +13,236 @@ namespace PSEtw.Shared;
 // https://learn.microsoft.com/en-us/windows/win32/etw/using-tdhformatproperty-to-consume-event-data
 // https://learn.microsoft.com/en-us/windows/win32/etw/retrieving-event-metadata
 
+/// <summary>
+/// Event args representing the raw ETW event record.
+/// </summary>
 public sealed class EtwEventArgs : EventArgs
 {
-    public EventHeader Header { get; }
-    public EventInfo? Info { get; }
+    /// <summary>
+    /// The Guid that uniquely identifies the provider that logged the event.
+    /// </summary>
+    public Guid ProviderId { get; }
 
-    // Used by Trace-PSEtwEvent and Stop-PSEtwTrace
-    internal CancellationTokenSource? CancelToken { get; set; }
+    /// <summary>
+    /// The name of the provider that logged the event.
+    /// This may be null if the event did not provider this information.
+    /// </summary>
+    public string? ProviderName { get; }
 
-    private EtwEventArgs(EventHeader header, EventInfo? info)
-    {
-        Header = header;
-        Info = info;
-    }
-
-    internal static EtwEventArgs Create(ref Advapi32.EVENT_RECORD record)
-    {
-        EventHeader header = new(ref record.EventHeader);
-
-        if (
-            record.EventHeader.Flags.HasFlag(HeaderFlags.EVENT_HEADER_FLAG_TRACE_MESSAGE) ||
-            record.EventHeader.Flags.HasFlag(HeaderFlags.EVENT_HEADER_FLAG_CLASSIC_HEADER) ||
-            record.EventHeader.Flags.HasFlag(HeaderFlags.EVENT_HEADER_FLAG_STRING_ONLY)
-        )
-        {
-            // FIXME: Find a WPP event to test with
-            throw new NotImplementedException(
-                $"Support for event with flags {record.EventHeader.Flags} has not been implemented");
-        }
-
-        int bufferSize = 0;
-        int res = Tdh.TdhGetEventInformation(
-            ref record,
-            0,
-            IntPtr.Zero,
-            IntPtr.Zero,
-            ref bufferSize);
-
-        if (res == Win32Error.ERROR_NOT_FOUND)
-        {
-            // No known schema for this event so we can only return out header.
-            return new(header, null);
-        }
-        else if (res != Win32Error.ERROR_SUCCESS && res != Win32Error.ERROR_INSUFFICIENT_BUFFER)
-        {
-            // Some other error we should be reporting back if possible.
-            throw new Win32Exception(res);
-        }
-
-        nint buffer = Marshal.AllocHGlobal(bufferSize);
-        try
-        {
-            res = Tdh.TdhGetEventInformation(ref record, 0, IntPtr.Zero, buffer, ref bufferSize);
-            Win32Error.ThrowIfError(res);
-
-            unsafe
-            {
-                Span<Tdh.TRACE_EVENT_INFO> eventInfo = new((void*)buffer, 1);
-                EventInfo info = new(
-                    ref record,
-                    ref eventInfo[0],
-                    buffer,
-                    GetPointerSize(record.EventHeader.Flags),
-                    record.UserData,
-                    record.UserDataLength);
-
-                return new(header, info);
-            }
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(buffer);
-        }
-    }
-
-    private static int GetPointerSize(HeaderFlags flags)
-    {
-        if (flags.HasFlag(HeaderFlags.EVENT_HEADER_FLAG_32_BIT_HEADER))
-        {
-            return 4;
-        }
-        else if (flags.HasFlag(HeaderFlags.EVENT_HEADER_FLAG_64_BIT_HEADER))
-        {
-            return 8;
-        }
-        else
-        {
-            return IntPtr.Size;
-        }
-    }
-
-    internal static string? ReadPtrString(nint buffer, int offset, int length = 0)
-    {
-        if (offset == 0)
-        {
-            return null;
-        }
-
-        nint ptr = IntPtr.Add(buffer, offset);
-
-        string? value = length > 0 ? Marshal.PtrToStringUni(ptr, length) : Marshal.PtrToStringUni(ptr);
-
-        // Some event entries end with a space so we strip that.
-        return value?.TrimEnd(' ');
-    }
-}
-
-public sealed class EventHeader
-{
-    public int ThreadId { get; }
+    /// <summary>
+    /// Identifies the process that generated the event.
+    /// </summary>
     public int ProcessId { get; }
+
+    /// <summary>
+    /// Identifies the thread that generated the event.
+    /// </summary>
+    public int ThreadId { get; }
+
+    /// <summary>
+    /// The time that the event occurred as a UTC DateTime.
+    /// </summary>
     public DateTime TimeStamp { get; }
-    public Guid ProviderId;
-    public EventDescriptor Descriptor { get; }
+
+    /// <summary>
+    /// Identifier that related two events.
+    /// </summary>
     public Guid ActivityId { get; }
 
-    internal EventHeader(ref Advapi32.EVENT_HEADER header)
-    {
-        ThreadId = header.ThreadId;
-        ProcessId = header.ProcessId;
-        TimeStamp = DateTime.FromFileTimeUtc(header.TimeStamp);
-        ProviderId = header.ProviderId;
-        Descriptor = new(ref header.EventDescriptor);
-        ActivityId = header.ActivityId;
-    }
-}
-
-public sealed class EventDescriptor
-{
+    /// <summary>
+    /// Identifier for manifest-based events.
+    /// For TraceLogging events this is typically set to 0 and can be ignored.
+    /// </summary>
     public short Id { get; }
+
+    /// <summary>
+    /// Indicates a revision of the definition of an event with a particular id.
+    /// </summary>
     public byte Version { get; }
+
+    /// <summary>
+    /// Number used to enable special event processing.
+    /// Values less than 16 are typically reserved by Microsoft, values above
+    /// can be given user-defined semantics.
+    /// </summary>
     public byte Channel { get; }
+
+    /// <summary>
+    /// The name of the channel if provided by the event.
+    /// </summary>
+    public string? ChannelName { get; }
+
+    /// <summary>
+    /// Describes an event's severity or importance.
+    /// </summary>
     public byte Level { get; }
-    public byte Opcode { get; }
+
+    /// <summary>
+    /// The name of the level if provided by the event.
+    /// </summary>
+    public string? LevelName { get; }
+
+    /// <summary>
+    /// Mark events with special semantics. Values from 10 through 239 can be
+    /// given user-defined semantics.
+    /// </summary>
+    public byte OpCode { get; }
+
+    /// <summary>
+    /// The name of the OpCode if provided by the event.
+    /// </summary>
+    public string? OpCodeName { get; }
+
+    /// <summary>
+    /// Identifies the event with a provider specific value.
+    /// </summary>
     public short Task { get; }
+
+    /// <summary>
+    /// The name of the task if provided by the event.
+    /// </summary>
+    public string? TaskName { get; }
+
+    /// <summary>
+    /// A bitmask used to indicate an event's membership in a set of event
+    /// categories. The top 16 bits of a keyword (0xFFFF000000000000) are
+    /// defined by Microsoft. The bottom 48 bits of a keyword
+    /// (0x0000FFFFFFFFFFFF) are defined by the event provider. Events with a
+    /// Keyword of 0 will typically bypass keyword-based filtering.
+    /// </summary>
     public long Keyword { get; }
 
-    internal EventDescriptor(ref Advapi32.EVENT_DESCRIPTOR descriptor)
+    /// <summary>
+    /// The names of each keyword set if provided by the event.
+    /// </summary>
+    public string[] KeywordNames { get; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Provides additional semantic data with an event. The semantics of any
+    /// values in this property are defined by the event provider.
+    /// </summary>
+    public int Tags { get; set; }
+
+    /// <summary>
+    /// The raw event data as a byte array. This can be used for manual
+    /// decoding of data or debugging in the case of a failure when unpacking
+    /// an event info object.
+    /// </summary>
+    public byte[] EventData { get; }
+
+    /// <summary>
+    /// The event properties with the name, value, and display value set.
+    /// </summary>
+    public EventPropertyInfo[] Properties { get; } = Array.Empty<EventPropertyInfo>();
+
+    /// <summary>
+    /// A description of the event based on the event data provided. If there
+    /// was a failure when attempting to unpack the data this will contain the
+    /// error message for debugging purposes.
+    /// </summary>
+    public string? EventMessage { get; }
+
+    /// <summary>
+    /// Used by Trace-PSEtwEvent and Stop-PSEtwTrace.
+    /// </summary>
+    internal CancellationTokenSource? CancelToken { get; set; }
+
+    internal EtwEventArgs(ref Advapi32.EVENT_RECORD record, bool includeEventData)
     {
+        Advapi32.EVENT_HEADER header = record.EventHeader;
+        Advapi32.EVENT_DESCRIPTOR descriptor = header.EventDescriptor;
+        ReadOnlySpan<byte> userData;
+        unsafe
+        {
+            userData = new((byte*)record.UserData, record.UserDataLength);
+        }
+        EventData = includeEventData ? userData.ToArray() : Array.Empty<byte>();
+
+        ProviderId = header.ProviderId;
+        ProcessId = header.ProcessId;
+        ThreadId = header.ThreadId;
+        TimeStamp = DateTime.FromFileTimeUtc(header.TimeStamp);
+        ActivityId = header.ActivityId;
+
         Id = descriptor.Id;
         Version = descriptor.Version;
         Channel = descriptor.Channel;
         Level = descriptor.Level;
-        Opcode = descriptor.Opcode;
+        OpCode = descriptor.Opcode;
         Task = descriptor.Task;
         Keyword = descriptor.Keyword;
-    }
-}
 
-public sealed class EventInfo
-{
-    public Guid EventGuid { get; }
-    public string? Provider { get; }
-    public string? Level { get; }
-    public string? Channel { get; }
-    public string[] Keywords { get; }
-    public string? Task { get; }
-    public string? OpCode { get; }
-    public string? RawEventMessage { get; }
-    public string? EventMessage { get; }
-    public string? ProviderMessage { get; }
-    public string? EventName { get; }
-    public string? RelatedActivityIdName { get; }
-    public EventPropertyInfo[] Properties { get; }
-
-    internal EventInfo(
-        ref Advapi32.EVENT_RECORD record,
-        ref Tdh.TRACE_EVENT_INFO info,
-        nint buffer,
-        int pointerSize,
-        nint userData,
-        short userDataLength)
-    {
-        EventGuid = info.EventGuid;
-        Provider = EtwEventArgs.ReadPtrString(buffer, info.ProviderNameOffset);
-        Level = EtwEventArgs.ReadPtrString(buffer, info.LevelNameOffset);
-        Channel = EtwEventArgs.ReadPtrString(buffer, info.ChannelNameOffset);
-        Keywords = ReadPtrStringList(buffer, info.KeywordsNameOffset);
-        Task = EtwEventArgs.ReadPtrString(buffer, info.TaskNameOffset);
-        OpCode = EtwEventArgs.ReadPtrString(buffer, info.OpcodeNameOffset);
-        RawEventMessage = EtwEventArgs.ReadPtrString(buffer, info.EventMessageOffset);
-        ProviderMessage = EtwEventArgs.ReadPtrString(buffer, info.ProviderMessageOffset);
-        EventName = EtwEventArgs.ReadPtrString(buffer, info.EventNameOffset);
-        RelatedActivityIdName = EtwEventArgs.ReadPtrString(buffer, info.RelatedActivityIDNameOffset);
-        Properties = ReadProperties(
-            ref record,
-            ref info,
-            buffer,
-            info.TopLevelPropertyCount,
-            info.PropertyCount,
-            pointerSize,
-            userData,
-            userDataLength);
-
-        if (info.EventMessageOffset > 0)
+        if (record.EventHeader.Flags.HasFlag(HeaderFlags.EVENT_HEADER_FLAG_STRING_ONLY))
         {
-            string[] replacements = Properties.Select(v => v.DisplayValue).ToArray();
-            EventMessage = FormatMessage(IntPtr.Add(buffer, info.EventMessageOffset), replacements);
+            EventMessage = UnmanagedHelpers.SpanToString(userData);
+            return;
         }
-        else
+
+        try
         {
-            EventMessage = RawEventMessage;
+            int bufferSize = 0;
+            int res = Tdh.TdhGetEventInformation(
+                ref record,
+                0,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                ref bufferSize);
+
+            if (res == Win32Error.ERROR_NOT_FOUND)
+            {
+                // No known schema for this event so we can't do anything else.
+                return;
+            }
+            else if (res != Win32Error.ERROR_SUCCESS && res != Win32Error.ERROR_INSUFFICIENT_BUFFER)
+            {
+                // Some other error we should be reporting back if possible.
+                throw new Win32Exception(res);
+            }
+
+            nint buffer = Marshal.AllocHGlobal(bufferSize);
+            try
+            {
+                res = Tdh.TdhGetEventInformation(ref record, 0, IntPtr.Zero, buffer, ref bufferSize);
+                Win32Error.ThrowIfError(res);
+
+                unsafe
+                {
+                    Span<Tdh.TRACE_EVENT_INFO> eventInfoData = new((void*)buffer, 1);
+                    ref Tdh.TRACE_EVENT_INFO eventInfo = ref eventInfoData[0];
+
+                    ProviderName = UnmanagedHelpers.ReadPtrStringUni(buffer, eventInfo.ProviderNameOffset);
+                    LevelName = UnmanagedHelpers.ReadPtrStringUni(buffer, eventInfo.LevelNameOffset);
+                    ChannelName = UnmanagedHelpers.ReadPtrStringUni(buffer, eventInfo.ChannelNameOffset);
+                    KeywordNames = UnmanagedHelpers.ReadPtrStringListUni(buffer, eventInfo.KeywordsNameOffset);
+                    TaskName = UnmanagedHelpers.ReadPtrStringUni(buffer, eventInfo.TaskNameOffset);
+                    OpCodeName = UnmanagedHelpers.ReadPtrStringUni(buffer, eventInfo.OpcodeNameOffset);
+                    EventMessage = UnmanagedHelpers.ReadPtrStringUni(buffer, eventInfo.EventMessageOffset);
+                    Tags = eventInfo.Tags & 0x0FFFFFFF;
+                    Properties = ReadProperties(
+                        ref record,
+                        ref eventInfo,
+                        buffer,
+                        userData);
+
+                    if (!string.IsNullOrWhiteSpace(EventMessage) && Properties.Length > 0)
+                    {
+                        string[] replacements = Properties.Select(v => v.DisplayValue).ToArray();
+                        EventMessage = FormatMessage(IntPtr.Add(buffer, eventInfo.EventMessageOffset), replacements);
+                    }
+                }
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+        catch (Win32Exception e)
+        {
+            EventMessage = $"Failed to unpack EventData: {e.Message} (0x{e.NativeErrorCode:X8})\n{e}";
+        }
+        catch (Exception e)
+        {
+            EventMessage = $"Failed to unpack EventData due to unhandled exception: {e.Message}\n{e}";
         }
     }
 
@@ -258,13 +288,9 @@ public sealed class EventInfo
         ref Advapi32.EVENT_RECORD record,
         ref Tdh.TRACE_EVENT_INFO info,
         nint buffer,
-        int topLevelCount,
-        int count,
-        int pointerSize,
-        nint userData,
-        short userDataLength)
+        ReadOnlySpan<byte> userData)
     {
-        if (count == 0)
+        if (info.PropertyCount == 0)
         {
             return Array.Empty<EventPropertyInfo>();
         }
@@ -273,18 +299,15 @@ public sealed class EventInfo
         nint propertiesOffset = IntPtr.Add(buffer, Marshal.SizeOf<Tdh.TRACE_EVENT_INFO>());
         unsafe
         {
-            Span<Tdh.EVENT_PROPERTY_INFO> properties = new((void*)propertiesOffset, count);
-
-            // We need to keep track of how much data is consumed from the
-            // buffer as properties are read.
-            Span<byte> userDataBuffer = new((byte*)userData, userDataLength);
+            Span<Tdh.EVENT_PROPERTY_INFO> properties = new((void*)propertiesOffset, info.PropertyCount);
 
             // Properties can refer back to previous ones to retrieve integer
             // values needed for things like the data/array count. The count
             // and length values are always 16 bits in length.
-            Span<short> integerValues = stackalloc short[count];
+            Span<short> integerValues = stackalloc short[info.PropertyCount];
+            int pointerSize = GetPointerSize(record.EventHeader.Flags);
 
-            for (int i = 0; i < topLevelCount; i++)
+            for (int i = 0; i < info.TopLevelPropertyCount; i++)
             {
                 EventPropertyInfo prop = EventPropertyInfo.Create(
                     ref record,
@@ -294,9 +317,12 @@ public sealed class EventInfo
                     i,
                     integerValues,
                     pointerSize,
-                    userDataBuffer,
+                    userData,
                     out int consumed);
-                userDataBuffer = userDataBuffer.Slice(consumed);
+
+                // We need to keep track of how much data is consumed from the
+                // buffer as properties are read.
+                userData = userData.Slice(consumed);
                 results.Add(prop);
             }
         }
@@ -304,38 +330,48 @@ public sealed class EventInfo
         return results.ToArray();
     }
 
-    private static string[] ReadPtrStringList(nint buffer, int offset)
+    private static int GetPointerSize(HeaderFlags flags)
     {
-        if (offset == 0)
+        if (flags.HasFlag(HeaderFlags.EVENT_HEADER_FLAG_32_BIT_HEADER))
         {
-            return Array.Empty<string>();
+            return 4;
         }
-
-        buffer = IntPtr.Add(buffer, offset);
-        List<string> values = new();
-        while (true)
+        else if (flags.HasFlag(HeaderFlags.EVENT_HEADER_FLAG_64_BIT_HEADER))
         {
-            string? value = Marshal.PtrToStringUni(buffer);
-            if (string.IsNullOrEmpty(value))
-            {
-                break;
-            }
-            else
-            {
-                buffer = IntPtr.Add(buffer, (value.Length + 1) * 2);
-                values.Add(value.TrimEnd(' '));
-            }
+            return 8;
         }
-
-        return values.ToArray();
+        else
+        {
+            return IntPtr.Size;
+        }
     }
 }
 
+/// <summary>
+/// Event property values.
+/// </summary>
 public sealed class EventPropertyInfo
 {
+    /// <summary>
+    /// The name of the property, can be null if unset.
+    /// </summary>
     public string? Name { get; }
+
+    /// <summary>
+    /// The value of the property as parsed by this library.
+    /// The type is dependent on the property metadata provided.
+    /// </summary>
     public object Value { get; }
+
+    /// <summary>
+    /// The string representation of the property as provided by Windows.
+    /// </summary>
     public string DisplayValue { get; }
+
+    /// <summary>
+    /// Provides additional semantic data with a property. The semantics of any
+    /// values in this property are defined by the event provider.
+    /// </summary>
     public int Tags { get; }
 
     internal EventPropertyInfo(string? name, object value, string displayValue, int tags)
@@ -363,7 +399,7 @@ public sealed class EventPropertyInfo
         out int consumed)
     {
         ref Tdh.EVENT_PROPERTY_INFO info = ref properties[index];
-        string? name = EtwEventArgs.ReadPtrString(buffer, info.NameOffset);
+        string? name = UnmanagedHelpers.ReadPtrStringUni(buffer, info.NameOffset);
 
         TdhInType inType = (TdhInType)info.InType;
         TdhOutType outType = (TdhOutType)info.OutType;
@@ -434,6 +470,7 @@ public sealed class EventPropertyInfo
 
                     string? displayValue = FormatProperty(
                         ref eventInfo,
+                        info.Flags,
                         mapNameBuffer,
                         pointerSize,
                         propLength,
@@ -449,7 +486,7 @@ public sealed class EventPropertyInfo
 
                     userData = userData.Slice(dataConsumed);
                     consumed += dataConsumed;
-                    displayValues.Add(displayValue ?? outValue.ToString() ?? "");
+                    displayValues.Add(displayValue ?? outValue.ToString() ?? string.Empty);
                     values.Add(outValue);
                 }
             }
@@ -552,6 +589,7 @@ public sealed class EventPropertyInfo
 
     private static string? FormatProperty(
         ref Tdh.TRACE_EVENT_INFO info,
+        EventPropertyFlags flags,
         nint mapInfo,
         int pointerSize,
         short propertyLength,

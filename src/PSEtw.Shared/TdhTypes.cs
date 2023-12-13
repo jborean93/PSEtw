@@ -1,3 +1,4 @@
+using PSEtw.Share;
 using PSEtw.Shared.Native;
 using System;
 using System.Buffers.Binary;
@@ -44,28 +45,13 @@ internal class TdhTypeReader
         {
             string msg =
                 $"No valid transformations of {reader.GetType().Name} to " +
-                $"{transformer.GetType().Name} for '{propertyName}'";
+                $"{outType} for '{propertyName}'";
             throw new NotImplementedException(msg);
         }
 
         storeInteger = reader.StoreInteger;
 
         return value;
-    }
-
-    protected static string SpanToString(ReadOnlySpan<byte> data, Encoding encoding)
-    {
-#if NET6_0_OR_GREATER
-        return encoding.GetString(data);
-#else
-        unsafe
-        {
-            fixed (byte* bytePtr = data)
-            {
-                return encoding.GetString(bytePtr, data.Length);
-            }
-        }
-#endif
     }
 
     private static (TdhTypeReader, TdhOutType) GetReader(
@@ -551,7 +537,7 @@ internal class TdhNullTerminatedStringReader : TdhTypeReader, ITdhStringReader
         encoding ??= _encoding;
         ReadOnlySpan<byte> raw = GetBytes(data, length, encoding);
 
-        return SpanToString(raw, encoding);
+        return UnmanagedHelpers.SpanToString(raw, encoding);
     }
 }
 
@@ -567,6 +553,7 @@ internal class TdhFixedLengthReader : TdhTypeReader, ITdhStringReader
     protected override ReadOnlySpan<byte> GetBytes(ReadOnlySpan<byte> data, int length)
     {
         ReadOnlySpan<byte> actualData = data.Slice(0, _size);
+
         switch (_size)
         {
             case 1:
@@ -606,7 +593,7 @@ internal class TdhFixedLengthReader : TdhTypeReader, ITdhStringReader
             }
         }
 
-        return SpanToString(raw, encoding);
+        return UnmanagedHelpers.SpanToString(raw, encoding);
     }
 }
 
@@ -647,7 +634,7 @@ internal class TdhCountedLengthReader : TdhTypeReader, ITdhStringReader
     }
 
     public string GetString(ReadOnlySpan<byte> data, int length, Encoding? encoding)
-        => SpanToString(GetBytes(data, length), encoding ?? _encoding);
+        => UnmanagedHelpers.SpanToString(GetBytes(data, length), encoding ?? _encoding);
 }
 
 internal class TdhSecurityIdentifierReader : TdhTypeReader, ITdhStringReader

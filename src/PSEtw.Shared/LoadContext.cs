@@ -19,7 +19,7 @@ public class LoadContext : AssemblyLoadContext
     private LoadContext(string mainModulePathAssemblyPath)
         : base (name: "PSEtw", isCollectible: false)
     {
-        _assemblyDir = Path.GetDirectoryName(mainModulePathAssemblyPath) ?? "";
+        _assemblyDir = Path.GetDirectoryName(mainModulePathAssemblyPath) ?? string.Empty;
         _thisAssembly = typeof(LoadContext).Assembly;
         _thisAssemblyName = _thisAssembly.GetName();
         _moduleAssembly = LoadFromAssemblyPath(mainModulePathAssemblyPath);
