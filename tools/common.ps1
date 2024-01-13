@@ -164,34 +164,13 @@ Function Assert-ModuleFast {
         [string]$Version = 'latest'
     )
 
-    $versionPath = if ($Version -eq 'latest') {
-        'latest/download'
-    }
-    else {
-        "download/$Version"
-    }
-
-    $ModuleName = 'ModuleFast'
-    $Uri = "https://github.com/JustinGrote/$ModuleName/releases/$versionPath/$ModuleName.psm1"
-
-    if (Get-Module $ModuleName) {
-        Write-Warning "Module $ModuleName already loaded, skipping bootstrap."
+    $moduleName = 'ModuleFast'
+    if (Get-Module $moduleName) {
+        Write-Warning "Module $moduleName already loaded, skipping bootstrap."
         return
     }
 
-    try {
-        $httpClient = [HttpClient]::new()
-        $httpClient.DefaultRequestHeaders.AcceptEncoding.Add('gzip')
-        $response = $httpClient.GetStringAsync($Uri).GetAwaiter().GetResult()
-    }
-    catch {
-        $PSItem.ErrorDetails = "Failed to fetch $ModuleName from $Uri`: $PSItem"
-        $PSCmdlet.ThrowTerminatingError($PSItem)
-    }
-
-    $scriptBlock = [ScriptBlock]::Create($response)
-
-    New-Module -Name $ModuleName -ScriptBlock $scriptblock | Import-Module
+    & ([scriptblock]::Create((Invoke-WebRequest -Uri 'bit.ly/modulefast'))) -Release $Version
 }
 
 Function Assert-PowerShell {
@@ -405,11 +384,12 @@ Function Install-BuildDependencies {
             return
         }
 
-        Assert-ModuleFast -Version v0.0.1
+        Assert-ModuleFast -Version v0.1.2
 
         $installParams = @{
             ModulesToInstall = $modules
             Destination = $modulePath
+            DestinationOnly = $true
             NoPSModulePathUpdate = $true
             NoProfileUpdate = $true
             Update = $true
