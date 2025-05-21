@@ -42,13 +42,13 @@ Trace-PSEtwEvent -Provider Microsoft-Windows-PowerShell -KeywordsAny Cmdlets |
 
 When you wish to stop the trace press `ctrl+c` and the trace should stop.
 
-The `Register-PSEtwEvent` cmdlet is similar to the [Register-ObjectEvent](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/register-objectevent?view=powershell-7.4) in that is creates a PowerShell event subscriber specifically for ETW events.
+The `Register-PSEtwEvent` cmdlet is similar to the [Register-ObjectEvent](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/register-objectevent?view=powershell-7.4) in that it creates a PowerShell event subscriber specifically for ETW events.
 ETW events received will go through the PowerShell eventing system and used just like any other event.
 It is important to use [Unregister-Event](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/unregister-event?view=powershell-7.4) to unregister a subscriber created by `Register-PSEtwEvent` as the ETW trace session can persist beyond the current process.
 
 When a trace is started the module will attempt to open the ETW trace session called `PSEtw` and if that is not present it will create a new one under that name.
 Only administrators can create an ETW trace session and members of the `Performance Log Users` can open an existing trace.
-A custom trace session can also be used by using the [New-PSEtwSession](./docs/en-US/New-PSEtwSession.md) cmdlet.
+A custom trace session can also be created by using the [New-PSEtwSession](./docs/en-US/New-PSEtwSession.md) cmdlet.
 
 Each cmdlet supports tab completion when using `-Provider ...` with a manifest based ETW provider.
 This makes it easy to figure out values that can be set for the `-KeywordsAll`, `-KeywordsAny`, and `-Level` parameters.
