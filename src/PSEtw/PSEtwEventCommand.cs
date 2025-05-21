@@ -70,10 +70,10 @@ public abstract class PSEtwEventBase : PSCmdlet, IDisposable
                 string msg =
                     "Failed to open or create default ETW Trace Session for module. Either:\n" +
                     "    * Rerun command as an Administrator\n" +
-                    "    * Create a custom trace session with 'New-PSEtwTraceSession' and use it with the " +
+                    "    * Create a custom trace session with 'New-PSEtwSession' and use it with the " +
                     $"'-{nameof(SessionName)}' parameter\n" +
                     "    * Create new default session as an Administrator with " +
-                    "'New-PSEtwTraceSession -UseDefault -SystemLogger' and add the current user to the " +
+                    "'New-PSEtwSession -Default -SystemLogger' and add the current user to the " +
                     "'Performance Log Users' group before trying again";
                 ErrorRecord err = new(
                     e,

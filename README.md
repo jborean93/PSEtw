@@ -48,7 +48,7 @@ It is important to use [Unregister-Event](https://learn.microsoft.com/en-us/powe
 
 When a trace is started the module will attempt to open the ETW trace session called `PSEtw` and if that is not present it will create a new one under that name.
 Only administrators can create an ETW trace session and members of the `Performance Log Users` can open an existing trace.
-A custom trace session can also be used by using the [New-PSEtwTraceSession](./docs/en-US/New-PSEtwSession.md) cmdlet.
+A custom trace session can also be used by using the [New-PSEtwSession](./docs/en-US/New-PSEtwSession.md) cmdlet.
 
 Each cmdlet supports tab completion when using `-Provider ...` with a manifest based ETW provider.
 This makes it easy to figure out values that can be set for the `-KeywordsAll`, `-KeywordsAny`, and `-Level` parameters.
